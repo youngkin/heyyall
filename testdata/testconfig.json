@@ -1,0 +1,24 @@
+{
+    "Rate": 1,
+    "MaxConcurrentRqsts": 2,
+    "RunDuration": "2s",
+    "NumRequests": 2,
+    "OutputType": "JSON",
+    "Endpoints": [
+        {
+            "URL": "http://google.com",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 50,
+            "NumRequests": 2
+        },
+        {
+            "URL": "http://google.com",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 50,
+            "NumRequests": 2
+        }
+    ]
+
+}

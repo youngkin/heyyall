@@ -1,9 +1,5 @@
 package api
 
-import (
-	"time"
-)
-
 // Endpoint contains the information needed to to send a request,
 // in the desired proportion to total requests, to a given
 // HTTP endpoint (e.g., someplace.com).
@@ -19,6 +15,10 @@ type Endpoint struct {
 	// to be made. As such the RqstPercent of all Endpoints in the
 	// config must add to 100.
 	RqstPercent int
+	// NumRequests is the total number of requests to make. See
+	// LoadTestConfig.RunDuration for the behavior when both
+	// RunDuration and NumRequests are specified.
+	NumRequests int
 	// Accept header
 	// content type header
 }
@@ -39,7 +39,7 @@ type LoadTestConfig struct {
 	// NumRequests is 200,000,000, if RunDuration expires before 200,000,000
 	// requests are made then the load test will finish at 10 seconds
 	// regardless of the number of requests specified.
-	RunDuration time.Duration
+	RunDuration string
 	// NumRequests is the total number of requests to make. See RunDuration
 	// above for the behavior when both RunDuration and NumRequests are
 	// specified.

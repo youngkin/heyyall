@@ -3,7 +3,7 @@ package internal
 import (
 	"time"
 
-	"github.com/youngkin/heystack/api"
+	"github.com/youngkin/heyyall/api"
 )
 
 // Response contains information describing the results
