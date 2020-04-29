@@ -1,0 +1,22 @@
+language: go
+
+go:
+  - 1.14.x
+
+os:
+  - linux
+
+before_install:
+  - go get -v golang.org/x/lint/golint
+
+script:
+  - go vet ./...
+  - go fmt ./...
+  - golint ./...
+  - go test ./... -v
+
+notifications:
+  # Get email notifications on builds (sent to email associated with Travis account)
+  email:
+    on_success: always
+    on_failure: always
