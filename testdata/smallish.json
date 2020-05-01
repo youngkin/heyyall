@@ -2,7 +2,7 @@
     "Rate": 10,
     "MaxConcurrentRqsts": 5,
     "RunDuration": "11s",
-    "NumRequests": 60,
+    "NumRequests": 4,
     "OutputType": "JSON",
     "Endpoints": [
         {

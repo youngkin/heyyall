@@ -13,16 +13,26 @@ import (
 // EndpointSummary is used to report an overview of the results of
 // a load test run for a given endpoint.
 type EndpointSummary struct {
-	totalDuration time.Duration
-	// URL is the endpoint URL
 	URL string
 	// Method is the HTTP Method (e.g., GET, PUT, POST, DELETE)
-	Method string
+	Method        string
+	totalDuration time.Duration
+	// URL is the endpoint URL
 	// HTTPStatusDist is a map of HTTP Status (e.g., 200, 201, 404, etc)
 	// to the number of occurrences (value) for a given status (key)
 	HTTPStatusDist map[int]int
-	// EPRunStats are the runtime stats pertinent to a specific endpoint
-	EPRunStats *Stats
+	// TotalRqsts is the overall number of requests made during the run
+	TotalRqsts int64
+	// TotalDuration is the overall run duration in seconds
+	TotalDuration string
+	// MaxRqstDuration is the longest request duration in microseconds
+	maxRqstDuration time.Duration
+	MaxRqstDuration string
+	// MinRqstDuration is the smallest request duration in microseconds
+	minRqstDuration time.Duration
+	MinRqstDuration string
+	// AvgRqstDuration is the average duration of a request in microseconds
+	AvgRqstDuration string
 }
 
 // Stats is used to report detailed statistics from a load
@@ -61,9 +71,23 @@ type RunSummary struct {
 	// MinRqstRatePerSec is the maximum request rate per second
 	// over 1/10th of the run duration or number of requests
 	//MinRqstRatePerSec int
-	// OverallRunStats is a summary of runtime statistics
-	// at an overall level
-	OverallRunStats Stats
+	// TotalRqsts is the overall number of requests made during the run
+	TotalRqsts int64
+	// TotalDuration is the overall run duration in seconds
+	TotalDuration string
+	// MaxRqstDuration is the longest request duration in microseconds
+	maxRqstDuration time.Duration
+	MaxRqstDuration string
+	// MinRqstDuration is the smallest request duration in microseconds
+	minRqstDuration time.Duration
+	MinRqstDuration string
+	// AvgRqstDuration is the average duration of a request in microseconds
+	AvgRqstDuration string
+	// EndpointOverviewSummary describes how often each endpoint was called.
+	// It is a map keyed by URL of a map keyed by HTTP verb with a value of
+	// number of requests. So it's a summary of how often each HTTP verb
+	// was called on each endpoint.
+	EndpointOverviewSummary map[string]map[string]int
 	// EndpointRunSummary is the per endpoint summary of results keyed by URL
 	EndpointRunSummary map[string]*EndpointSummary
 }
@@ -79,45 +103,40 @@ type ResponseHandler struct {
 func (rh ResponseHandler) Start() {
 	log.Debug().Msg("ResponseHandler starting")
 	epRunSummary := make(map[string]*EndpointSummary)
-	stats := Stats{maxRqstDuration: -1, minRqstDuration: time.Duration(math.MaxInt64)}
+	runSummary := RunSummary{maxRqstDuration: -1, minRqstDuration: time.Duration(math.MaxInt64)}
+	runSummary.EndpointOverviewSummary = make(map[string]map[string]int)
 
 	var totalDurationSummary time.Duration
 
 	for {
 		select {
 		case <-rh.Ctx.Done():
-			stats.TotalDuration = totalDurationSummary.String()
-			stats.MaxRqstDuration = stats.maxRqstDuration.String()
-			stats.MinRqstDuration = stats.minRqstDuration.String()
+			runSummary.TotalDuration = totalDurationSummary.String()
+			runSummary.MaxRqstDuration = runSummary.maxRqstDuration.String()
+			runSummary.MinRqstDuration = runSummary.minRqstDuration.String()
 			avgRqstDuration := time.Duration(0)
-			if stats.TotalRqsts > 0 {
-				avgRqstDuration = totalDurationSummary / time.Duration(stats.TotalRqsts)
+			if runSummary.TotalRqsts > 0 {
+				avgRqstDuration = totalDurationSummary / time.Duration(runSummary.TotalRqsts)
 			}
-			stats.AvgRqstDuration = avgRqstDuration.String()
+			runSummary.AvgRqstDuration = avgRqstDuration.String()
+
+			// run times shorter than 1 second will result in a 'RqstRatePerSec' being zero due to rounding
+			runDurInSecs := totalDurationSummary / time.Second
+			if runDurInSecs > 0 {
+				runSummary.RqstRatePerSec = float64(runSummary.TotalRqsts / int64(runDurInSecs))
+			}
+			runSummary.EndpointRunSummary = epRunSummary
 
 			for _, epSumm := range epRunSummary {
-				epSumm.EPRunStats.MaxRqstDuration = epSumm.EPRunStats.maxRqstDuration.String()
-				epSumm.EPRunStats.MinRqstDuration = epSumm.EPRunStats.minRqstDuration.String()
-				epSumm.EPRunStats.AvgRqstDuration = "0s"
-				if epSumm.EPRunStats.TotalRqsts > 0 {
-					epSumm.EPRunStats.AvgRqstDuration = (epSumm.totalDuration / time.Duration(epSumm.EPRunStats.TotalRqsts)).String()
+				epSumm.MaxRqstDuration = epSumm.maxRqstDuration.String()
+				epSumm.MinRqstDuration = epSumm.minRqstDuration.String()
+				epSumm.AvgRqstDuration = "0s"
+				if epSumm.TotalRqsts > 0 {
+					epSumm.AvgRqstDuration = (epSumm.totalDuration / time.Duration(epSumm.TotalRqsts)).String()
 				}
-				epSumm.EPRunStats.TotalDuration = epSumm.totalDuration.String()
+				epSumm.TotalDuration = epSumm.totalDuration.String()
 				log.Debug().Msgf("EndpointSummary: %+v", epSumm)
-				log.Debug().Msgf("\tEPunStatus: %+v\n", *epSumm.EPRunStats)
 			}
-
-			runSummary := RunSummary{
-				// Very short run times can result in a 'RqstRatePerSec' being zero due to rounding errors
-				RqstRatePerSec:     float64(stats.TotalRqsts/int64(totalDurationSummary)) * float64(time.Second),
-				OverallRunStats:    stats,
-				EndpointRunSummary: epRunSummary,
-			}
-			// fmt.Printf("\n\nDEBUG:\tFINAL RunSummary: %+v\n", runSummary)
-			// fmt.Printf("\tEndpointRunSummary: %+v\n", epRunSummary)
-			// for _, eps := range epRunSummary {
-			// 	fmt.Printf("\t\tEP Summary: %+v\n", eps)
-			// }
 
 			rsjson, err := json.Marshal(runSummary)
 			if err != nil {
@@ -129,40 +148,44 @@ func (rh ResponseHandler) Start() {
 			fmt.Printf("%s\n", rsjson)
 			return
 		case resp := <-rh.ResponseC:
-			stats.TotalRqsts++
+			runSummary.TotalRqsts++
 			totalDurationSummary = totalDurationSummary + resp.RequestDuration
-			if resp.RequestDuration > stats.maxRqstDuration {
-				stats.maxRqstDuration = resp.RequestDuration
+			if resp.RequestDuration > runSummary.maxRqstDuration {
+				runSummary.maxRqstDuration = resp.RequestDuration
 			}
-			if resp.RequestDuration < stats.minRqstDuration {
-				stats.minRqstDuration = resp.RequestDuration
+			if resp.RequestDuration < runSummary.minRqstDuration {
+				runSummary.minRqstDuration = resp.RequestDuration
 			}
 
+			var eqRqstCount map[string]int
+			eqRqstCount, ok := runSummary.EndpointOverviewSummary[resp.Endpoint.URL]
+			if !ok {
+				runSummary.EndpointOverviewSummary[resp.Endpoint.URL] = make(map[string]int)
+				eqRqstCount = runSummary.EndpointOverviewSummary[resp.Endpoint.URL]
+			}
+			eqRqstCount[resp.Endpoint.Method]++
+
 			var epSumm *EndpointSummary
-			var ok bool
 			epSumm, ok = epRunSummary[resp.Endpoint.URL]
 			if !ok {
 				epSumm = &EndpointSummary{
-					URL:            resp.Endpoint.URL,
-					Method:         resp.Endpoint.Method,
-					HTTPStatusDist: make(map[int]int),
-					EPRunStats: &Stats{
-						maxRqstDuration: -1,
-						minRqstDuration: time.Duration(math.MaxInt64),
-					},
+					URL:             resp.Endpoint.URL,
+					Method:          resp.Endpoint.Method,
+					HTTPStatusDist:  make(map[int]int),
+					maxRqstDuration: -1,
+					minRqstDuration: time.Duration(math.MaxInt64),
 				}
 				epRunSummary[resp.Endpoint.URL] = epSumm
 			}
 
-			epSumm.EPRunStats.TotalRqsts++
+			epSumm.TotalRqsts++
 			epSumm.totalDuration = epSumm.totalDuration + resp.RequestDuration
-			// fmt.Printf("\n\n\t\t!!!!!!!!! epSumm.totalDuration: %d !!!!!!!!!!!!\n\n", epSumm.totalDuration)
 
-			if resp.RequestDuration > epSumm.EPRunStats.maxRqstDuration {
-				epSumm.EPRunStats.maxRqstDuration = resp.RequestDuration
+			if resp.RequestDuration > epSumm.maxRqstDuration {
+				epSumm.maxRqstDuration = resp.RequestDuration
 			}
-			if resp.RequestDuration < epSumm.EPRunStats.minRqstDuration {
-				epSumm.EPRunStats.minRqstDuration = resp.RequestDuration
+			if resp.RequestDuration < epSumm.minRqstDuration {
+				epSumm.minRqstDuration = resp.RequestDuration
 			}
 
 			_, ok = epSumm.HTTPStatusDist[resp.HTTPStatus]

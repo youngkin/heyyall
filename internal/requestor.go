@@ -10,11 +10,11 @@ import (
 	"github.com/youngkin/heyyall/api"
 )
 
-// schedFreq contains the information needed to determine how often to send
+// rqstItem contains the information needed to determine how often to send
 // requests to a given endpoint. It also includes the nextRunOffset iteration to
 // send the request. This 'nextRunOffset' interation will be recalculated after each
 // request is sent.
-type schedFreq struct {
+type rqstItem struct {
 	freq int // 1 is every request, 2 is every other request, 10 is every 10th request...
 	ep   api.Endpoint
 }
@@ -47,8 +47,8 @@ type Requestor struct {
 	numRqsts int
 	// endpoints represents the set of endpoints getting requests
 	endpoints []api.Endpoint
-	// freqs is a map, keyed by the next scheduled request iteration, of schedFreqs
-	freqs map[int][]schedFreq
+	// rqstSched is a map, keyed by the next scheduled request iteration, of schedFreqs
+	rqstSched map[int][]rqstItem
 }
 
 // NewRequestor returns a valid Requestor instance
@@ -65,11 +65,11 @@ func NewRequestor(ctx context.Context, doneC chan struct{}, schedC chan Request,
 	// e.g., 10/sec vs. 1/sec, are first
 	sort.Slice(eps, func(i, j int) bool { return eps[i].RqstPercent > eps[j].RqstPercent })
 
-	freqs := make(map[int][]schedFreq)
+	rSched := make(map[int][]rqstItem)
 	totalPct := 0
 	for _, ep := range eps {
 		totalPct += ep.RqstPercent
-		sFreq := schedFreq{
+		sFreq := rqstItem{
 			freq: ep.RqstPercent,
 			ep:   ep,
 		}
@@ -78,10 +78,10 @@ func NewRequestor(ctx context.Context, doneC chan struct{}, schedC chan Request,
 		// originally sorting of the 'eps' slice above. As the run progresses the
 		// requests will eventually spread out across the map according to their
 		// relative frequencies. See 'getNextRqst()' for details.
-		if _, ok := freqs[0]; !ok {
-			freqs[0] = make([]schedFreq, 0)
+		if _, ok := rSched[0]; !ok {
+			rSched[0] = make([]rqstItem, 0)
 		}
-		freqs[0] = append(freqs[0], sFreq)
+		rSched[0] = append(rSched[0], sFreq)
 	}
 	if totalPct != 100 {
 		return Requestor{}, fmt.Errorf("total RqstPercent across all Endpoints is %d. It must not be greater than 100",
@@ -97,7 +97,7 @@ func NewRequestor(ctx context.Context, doneC chan struct{}, schedC chan Request,
 		runDur:    dur,
 		numRqsts:  numRqsts,
 		endpoints: eps,
-		freqs:     freqs,
+		rqstSched: rSched,
 	}
 	log.Debug().Msgf("Requestor: %+v", rqstor)
 
@@ -108,10 +108,15 @@ func NewRequestor(ctx context.Context, doneC chan struct{}, schedC chan Request,
 func (r Requestor) Start() {
 	log.Debug().Msg("Requestor starting")
 	timesUp := time.After(r.runDur)
-	for i := 0; i <= r.numRqsts; i++ {
-		nextRqst, ok := getNextRqst(r.freqs, i)
+	// We may have to adjust how many times to run the loop below if we
+	// hit empty slice cells (which can happen)
+	rqstsToProcess := r.numRqsts
+	for i := 0; i < rqstsToProcess; i++ {
+		nextRqst, ok := getNextRqst(r.rqstSched, i)
 		if !ok {
-			// fmt.Printf("WARN:\tNo requests at Requestor.freqs[%d]\n", i)
+			log.Debug().Msgf("No requests at Requestor.freqs[%d]", i)
+			// increment limit so that we don't count this empty cell as a request
+			rqstsToProcess++
 			continue
 		}
 		// fmt.Printf("DEBUG:\tSending request %+v\n", nextRqst)
@@ -140,20 +145,20 @@ func (r Requestor) Start() {
 	}
 	// Sleep a bit before stopping to allow in-flight requests to complete
 	time.Sleep(time.Millisecond * 500)
-	//fmt.Printf("INFO:\tSending DONE signal after processing %d requests \n", r.numRqsts)
+	log.Debug().Msgf("Sending DONE signal after processing %d requests \n", r.numRqsts)
 	close(r.doneC)
 }
 
-func getNextRqst(freqs map[int][]schedFreq, idx int) (schedFreq, bool) {
+func getNextRqst(freqs map[int][]rqstItem, idx int) (rqstItem, bool) {
 	candidateRqsts, ok := freqs[idx]
 	if !ok {
 		// TODO:
 		// There may be holes in the map, i.e., nothing to send this
 		// iteration. For example, for any RqstPercent < 100 there won't
 		// be a [0] entry. This isn't great, need to come back and address it.
-		return schedFreq{}, false
+		return rqstItem{}, false
 	}
-	var nextRqst schedFreq
+	var nextRqst rqstItem
 	if len(candidateRqsts) > 0 {
 		nextRqst = candidateRqsts[0]
 	}
@@ -168,7 +173,7 @@ func getNextRqst(freqs map[int][]schedFreq, idx int) (schedFreq, bool) {
 	// request should be scheduled.
 	nextSchedIteration := idx + nextRqst.freq
 	if _, ok := freqs[nextSchedIteration]; !ok {
-		freqs[nextSchedIteration] = make([]schedFreq, 0)
+		freqs[nextSchedIteration] = make([]rqstItem, 0)
 	}
 	// fmt.Printf("DEBUG:\t!!!!\tSCHEDULING rqst %s from current location %d for freq %d to location %d\n", nextRqst.ep.URL, idx, nextRqst.freq, nextSchedIteration)
 	freqs[nextSchedIteration] = append(freqs[nextSchedIteration], nextRqst)
