@@ -4,34 +4,41 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"io/ioutil"
+	"os"
 	"time"
 
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/youngkin/heyyall/api"
 	"github.com/youngkin/heyyall/internal"
 )
 
 func main() {
 	configFile := flag.String("config", "config.json", "path and filename containing the runtime configuration")
+	logLevel := flag.Int("loglevel", 1, "log level, 0 for debug, 1 info, 2 warn, ...")
 	flag.Parse()
 
-	fmt.Printf("INFO:\tReading config file at %s\n", *configFile)
+	zerolog.SetGlobalLevel(zerolog.Level(*logLevel))
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	log.Info().Msgf("heyyall started with config from %s", *configFile)
+
 	contents, err := ioutil.ReadFile(*configFile)
 	if err != nil {
-		fmt.Printf("FATAL:\terror reading config file: %s, error: %s\n\nEXITING!!!\n", *configFile, err)
+		log.Fatal().Err(err).Msgf("unable to read config file %s", *configFile)
 		return
 	}
 
-	fmt.Printf("INFO:\tRaw configFile contents: %v\n", string(contents))
+	log.Debug().Msgf("Raw config file contents: %s", string(contents))
 
 	config := api.LoadTestConfig{}
 	if err = json.Unmarshal(contents, &config); err != nil {
-		fmt.Printf("FATAL:\terror loading test config from: %s, error: %s.\n\nEXITING!\n", string(contents), err)
+		log.Fatal().Err(err).Msgf("error unmarshaling test config bytes: %s", string(contents))
 		return
 	}
 
-	fmt.Printf("INFO:\tConfig: %+v\n", config)
+	//fmt.Printf("INFO:\tConfig: %+v\n", config)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -51,31 +58,30 @@ func main() {
 		MaxConcurrentRqsts: config.MaxConcurrentRqsts,
 		Ctx:                ctx,
 		SchedC:             schedC,
-		Rate:               config.Rate,
 	}
 	go scheduler.Start()
 	// Give scheduler a bit of time to start
 	time.Sleep(time.Millisecond * 20)
 
 	requestor, err := internal.NewRequestor(ctx, doneC, schedC, responseC,
-		config.RunDuration, config.NumRequests, config.Endpoints)
+		config.Rate, config.RunDuration, config.NumRequests, config.Endpoints)
 	if err != nil {
-		fmt.Printf("FATAL:\terror creating Requestor: %s\n", err)
+		//fmt.Printf("FATAL:\terror creating Requestor: %s\n", err)
 		return
 	}
 	go requestor.Start()
 	// Give requestor a bit of time to start
 	time.Sleep(time.Millisecond * 20)
 
-	fmt.Printf("INFO:\tListening for completion until time is up in %s\n", config.RunDuration)
+	//fmt.Printf("DEBUG:\tListening for completion until time is up in %s\n", config.RunDuration)
 	<-doneC
 
-	fmt.Printf("INFO:\theyyall stopping goroutines\n")
+	//fmt.Printf("INFO:\theyyall stopping goroutines\n")
 	cancel()
 	// Give scheduler and responseHandler a bit of time to exit
 	time.Sleep(time.Millisecond * 20)
 
-	fmt.Printf("INFO:\theyyall Exiting\n")
+	//fmt.Printf("INFO:\theyyall Exiting\n")
 	// Call from SIGTERMHandler
 	// close(closeC)
 }

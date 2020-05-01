@@ -3,18 +3,19 @@ package internal
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/youngkin/heyyall/api"
 )
 
 // schedFreq contains the information needed to determine how often to send
-// requests to a given endpoint. It also includes the next iteration to
-// send the request. This 'next' interation will be recalculated after each
+// requests to a given endpoint. It also includes the nextRunOffset iteration to
+// send the request. This 'nextRunOffset' interation will be recalculated after each
 // request is sent.
 type schedFreq struct {
-	freq int
-	next int
+	freq int // 1 is every request, 2 is every other request, 10 is every 10th request...
 	ep   api.Endpoint
 }
 
@@ -29,6 +30,8 @@ type Requestor struct {
 	// doneC is used by the Requestor to signal that it has completed the run,
 	// either in terms of load test run duration or total number of requests.
 	doneC chan struct{}
+	// rate is the desired overall requests per second
+	rate int
 	// runDur is how long the test will run. It can be expressed
 	// in seconds or minutes as xs or xm where x is an integer (e.g.,
 	// 10s for 10 seconds, 5m for 5 minutes). If both numRqsts and
@@ -50,7 +53,7 @@ type Requestor struct {
 
 // NewRequestor returns a valid Requestor instance
 func NewRequestor(ctx context.Context, doneC chan struct{}, schedC chan Request,
-	responseC chan Response, runDur string, numRqsts int, eps []api.Endpoint) (Requestor, error) {
+	responseC chan Response, rate int, runDur string, numRqsts int, eps []api.Endpoint) (Requestor, error) {
 
 	dur, err := time.ParseDuration(runDur)
 	if err != nil {
@@ -58,23 +61,27 @@ func NewRequestor(ctx context.Context, doneC chan struct{}, schedC chan Request,
 			runDur)
 	}
 
-	if numRqsts < 100 {
-		fmt.Printf("WARNING: NumRequests: %d is less than 100. Some requests may not be sent\n", numRqsts)
-	}
+	// Sort slice in reverse order to get EPs that should be run more frequently,
+	// e.g., 10/sec vs. 1/sec, are first
+	sort.Slice(eps, func(i, j int) bool { return eps[i].RqstPercent > eps[j].RqstPercent })
 
 	freqs := make(map[int][]schedFreq)
 	totalPct := 0
 	for _, ep := range eps {
 		totalPct += ep.RqstPercent
 		sFreq := schedFreq{
-			freq: (100 / ep.RqstPercent) - 1,
-			next: (100 / ep.RqstPercent) - 1,
+			freq: ep.RqstPercent,
 			ep:   ep,
 		}
-		if _, ok := freqs[sFreq.next]; !ok {
-			freqs[sFreq.next] = make([]schedFreq, 0)
+		// Initially start with all requests in the 0th cell. This ensures that
+		// the most frequently run requests will be first in the slice, due to the
+		// originally sorting of the 'eps' slice above. As the run progresses the
+		// requests will eventually spread out across the map according to their
+		// relative frequencies. See 'getNextRqst()' for details.
+		if _, ok := freqs[0]; !ok {
+			freqs[0] = make([]schedFreq, 0)
 		}
-		freqs[sFreq.next] = append(freqs[sFreq.next], sFreq)
+		freqs[0] = append(freqs[0], sFreq)
 	}
 	if totalPct != 100 {
 		return Requestor{}, fmt.Errorf("total RqstPercent across all Endpoints is %d. It must not be greater than 100",
@@ -86,44 +93,54 @@ func NewRequestor(ctx context.Context, doneC chan struct{}, schedC chan Request,
 		schedC:    schedC,
 		responseC: responseC,
 		doneC:     doneC,
+		rate:      rate,
 		runDur:    dur,
 		numRqsts:  numRqsts,
 		endpoints: eps,
 		freqs:     freqs,
 	}
-	fmt.Printf("INFO: Requestor: %+v\n", rqstor)
+	log.Debug().Msgf("Requestor: %+v", rqstor)
 
 	return rqstor, nil
 }
 
 // Start begins the scheduling process
 func (r Requestor) Start() {
-	fmt.Println("INFO:\tRequestor starting")
+	log.Debug().Msg("Requestor starting")
 	timesUp := time.After(r.runDur)
-	// TODO: Need to try at least 1 more than numRequests in case multiple
-	// requests map to the same cell
 	for i := 0; i <= r.numRqsts; i++ {
 		nextRqst, ok := getNextRqst(r.freqs, i)
 		if !ok {
-			fmt.Printf("INFO:\tNo requests at Requestor.freqs[%d]\n", i)
+			// fmt.Printf("WARN:\tNo requests at Requestor.freqs[%d]\n", i)
 			continue
 		}
-		fmt.Printf("DEBUG:\tSending request %+v\n", nextRqst)
+		// fmt.Printf("DEBUG:\tSending request %+v\n", nextRqst)
 
+		start := time.Now()
 		select {
 		case <-r.ctx.Done():
 			return
 		case <-timesUp:
-			fmt.Printf("INFO:\tTime's up after %d seconds. Sending DONE signal\n", r.runDur/time.Second)
+			log.Debug().Msgf("Time's up after %d seconds. Sending DONE signal", r.runDur/time.Second)
 			close(r.doneC)
 			return
 		case r.schedC <- Request{EP: nextRqst.ep, ResponseC: r.responseC}:
-			fmt.Printf("DEBUG:\tSent Request for %+v\n", nextRqst.ep)
+			// fmt.Printf("DEBUG:\tSent Request for %+v\n", nextRqst.ep)
 		}
+
+		// Sleep here to control rate. This will be approximate. If sending
+		// a request blocks longer than the rate, i.e., 'delta' < 0 then the
+		// rate will be slower.
+		since := time.Since(start)
+		delta := (time.Second / time.Duration(r.rate)) - since
+		if delta < 0 {
+			continue
+		}
+		time.Sleep(delta)
 	}
 	// Sleep a bit before stopping to allow in-flight requests to complete
 	time.Sleep(time.Millisecond * 500)
-	fmt.Printf("INFO:\tSending DONE signal after processing %d requests \n", r.numRqsts)
+	//fmt.Printf("INFO:\tSending DONE signal after processing %d requests \n", r.numRqsts)
 	close(r.doneC)
 }
 
@@ -149,10 +166,11 @@ func getNextRqst(freqs map[int][]schedFreq, idx int) (schedFreq, bool) {
 
 	// Before moving on, we need to schedule the next time this
 	// request should be scheduled.
-	nextSchedIteration := nextRqst.next + nextRqst.freq
+	nextSchedIteration := idx + nextRqst.freq
 	if _, ok := freqs[nextSchedIteration]; !ok {
 		freqs[nextSchedIteration] = make([]schedFreq, 0)
 	}
+	// fmt.Printf("DEBUG:\t!!!!\tSCHEDULING rqst %s from current location %d for freq %d to location %d\n", nextRqst.ep.URL, idx, nextRqst.freq, nextSchedIteration)
 	freqs[nextSchedIteration] = append(freqs[nextSchedIteration], nextRqst)
 
 	return nextRqst, true

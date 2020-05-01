@@ -1,0 +1,80 @@
+{
+    "Rate": 10,
+    "MaxConcurrentRqsts": 5,
+    "RunDuration": "11s",
+    "NumRequests": 100,
+    "OutputType": "JSON",
+    "Endpoints": [
+        {
+            "URL": "http://accountd.kube/users",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 10,
+            "NumRequests": 10
+        },
+        {
+            "URL": "http://accountd.kube/users/1",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 10,
+            "NumRequests": 10
+        },
+        {
+            "URL": "http://accountd.kube/users/2",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 10,
+            "NumRequests": 10
+        },
+        {
+            "URL": "http://accountd.kube/users/3",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 10,
+            "NumRequests": 10
+        },
+        {
+            "URL": "http://accountd.kube/users/4",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 10,
+            "NumRequests": 10
+        },
+        {
+            "URL": "http://accountd.kube/users/5",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 10,
+            "NumRequests": 10
+        },
+        {
+            "URL": "http://accountd.kube/users/6",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 10,
+            "NumRequests": 10
+        },
+        {
+            "URL": "http://accountd.kube/users/7",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 10,
+            "NumRequests": 10
+        },
+        {
+            "URL": "http://accountd.kube/users/8",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 10,
+            "NumRequests": 10
+        },
+        {
+            "URL": "http://accountd.kube/users/9",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 10,
+            "NumRequests": 10
+        }
+    ]
+
+}
