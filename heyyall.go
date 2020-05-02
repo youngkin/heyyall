@@ -16,7 +16,7 @@ import (
 
 func main() {
 	configFile := flag.String("config", "config.json", "path and filename containing the runtime configuration")
-	logLevel := flag.Int("loglevel", 1, "log level, 0 for debug, 1 info, 2 warn, ...")
+	logLevel := flag.Int("loglevel", zerolog.InfoLevel, "log level, 0 for debug, 1 info, 2 warn, ...")
 	flag.Parse()
 
 	zerolog.SetGlobalLevel(zerolog.Level(*logLevel))
@@ -75,6 +75,8 @@ func main() {
 
 	//fmt.Printf("DEBUG:\tListening for completion until time is up in %s\n", config.RunDuration)
 	<-doneC
+	close(schedC)
+	close(responseC)
 
 	//fmt.Printf("INFO:\theyyall stopping goroutines\n")
 	cancel()
