@@ -16,7 +16,7 @@ import (
 
 func main() {
 	configFile := flag.String("config", "config.json", "path and filename containing the runtime configuration")
-	logLevel := flag.Int("loglevel", zerolog.InfoLevel, "log level, 0 for debug, 1 info, 2 warn, ...")
+	logLevel := flag.Int("loglevel", int(zerolog.WarnLevel), "log level, 0 for debug, 1 info, 2 warn, ...")
 	flag.Parse()
 
 	zerolog.SetGlobalLevel(zerolog.Level(*logLevel))
@@ -66,7 +66,10 @@ func main() {
 	requestor, err := internal.NewRequestor(ctx, doneC, schedC, responseC,
 		config.Rate, config.RunDuration, config.NumRequests, config.Endpoints)
 	if err != nil {
-		//fmt.Printf("FATAL:\terror creating Requestor: %s\n", err)
+		log.Fatal().Err(err).Msg("Unexpected error configuring new Requestor")
+		close(schedC)
+		close(responseC)
+		cancel()
 		return
 	}
 	go requestor.Start()
