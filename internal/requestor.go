@@ -133,6 +133,10 @@ func (r Requestor) Start() {
 				// fmt.Printf("DEBUG:\tSent Request for %+v\n", nextRqst.ep)
 			}
 
+			// A zero rate disables rate-based throttling
+			if r.rate == 0 {
+				continue
+			}
 			// Sleep here to control rate. This will be approximate. If sending
 			// a request blocks longer than the rate, i.e., 'delta' < 0 then the
 			// rate will be slower.
@@ -182,7 +186,7 @@ func (r Requestor) Start() {
 	}
 
 	// Sleep a bit before stopping to allow in-flight requests to complete
-	time.Sleep(time.Millisecond * 500)
+	time.Sleep(time.Millisecond * 1500)
 	log.Debug().Msgf("Requestor sending DONE signal after processing %d requests \n", r.numRqsts)
 	close(r.doneC)
 }

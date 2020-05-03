@@ -1,6 +1,6 @@
 {
-    "Rate": 1000,
-    "MaxConcurrentRqsts": 1000,
+    "Rate": 0,
+    "MaxConcurrentRqsts": 50,
     "RunDuration": "0s",
     "NumRequests": 1000,
     "OutputType": "JSON",

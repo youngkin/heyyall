@@ -144,8 +144,6 @@ func (rh ResponseHandler) Start() {
 			}
 			epSumm.HTTPStatusDist[resp.HTTPStatus]++
 
-			// fmt.Printf("DEBUG:\tEndpointSummary: %+v\n", epSumm)
-			// fmt.Printf("\tEPRunStatus: %+v\n", *epSumm.EPRunStats)
 		case <-rh.Ctx.Done():
 			runTime := time.Since(start)
 			runSummary.RunDuration = runTime.String()
