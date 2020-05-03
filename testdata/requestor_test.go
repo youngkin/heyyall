@@ -26,12 +26,6 @@ type TestCase struct {
 
 var debugLevel = flag.Int("debugLvl", int(zerolog.ErrorLevel), "debug level - 0 thru 5 0 being DEBUG")
 
-func init() {
-	// flag.Parse()
-	// zerolog.SetGlobalLevel(zerolog.Level(*debugLevel))
-	// log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
-}
-
 func scheduler(ctx context.Context, t *testing.T, tc TestCase, schedC chan internal.Request, completeC chan bool) {
 	rqstDist := make(map[string]int)
 	iterations := 0
@@ -123,7 +117,7 @@ func TestRequestor(t *testing.T) {
 			name:     "HappyPath - Hit test's numRqsts, should get 10 requests in less than 1 second",
 			rqstRate: goFastRate,
 			runDur:   "0s",
-			numRqsts: 10,
+			numRqsts: 20,
 			eps: []api.Endpoint{
 				{
 					URL:         url1,
@@ -140,7 +134,7 @@ func TestRequestor(t *testing.T) {
 					NumRequests: 5,
 				},
 			},
-			expectedDist: map[string]int{url1: 8, url2: 2},
+			expectedDist: map[string]int{url1: 16, url2: 4},
 		},
 		// Since this test depends on the behavior of time.Sleep(), it's non-deterministic. It mostly
 		// passes, but it can fail when time.Sleep() sleeps substantially longer than planned, which
@@ -178,7 +172,7 @@ func TestRequestor(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 
 			rqstr, err := internal.NewRequestor(ctx, doneC, schedC,
-				make(chan internal.Response), tc.rqstRate, tc.runDur, tc.numRqsts, tc.eps)
+				tc.rqstRate, tc.runDur, tc.numRqsts, tc.eps)
 			if err == nil && tc.shouldFail == true {
 				t.Fatalf("unexpected success creating Requestor: %s", err)
 			}

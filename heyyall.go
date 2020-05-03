@@ -6,6 +6,7 @@ import (
 	"flag"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -20,7 +21,9 @@ func main() {
 	flag.Parse()
 
 	zerolog.SetGlobalLevel(zerolog.Level(*logLevel))
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.StampMilli})
+
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	log.Info().Msgf("heyyall started with config from %s", *configFile)
 
@@ -42,7 +45,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	responseC := make(chan internal.Response)
+	responseC := make(chan internal.Response, config.MaxConcurrentRqsts)
 	doneC := make(chan struct{})
 	schedC := make(chan internal.Request)
 
@@ -58,12 +61,13 @@ func main() {
 		MaxConcurrentRqsts: config.MaxConcurrentRqsts,
 		Ctx:                ctx,
 		SchedC:             schedC,
+		ResponseC:          responseC,
 	}
 	go scheduler.Start()
 	// Give scheduler a bit of time to start
 	time.Sleep(time.Millisecond * 20)
 
-	requestor, err := internal.NewRequestor(ctx, doneC, schedC, responseC,
+	requestor, err := internal.NewRequestor(ctx, doneC, schedC,
 		config.Rate, config.RunDuration, config.NumRequests, config.Endpoints)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Unexpected error configuring new Requestor")
@@ -78,13 +82,16 @@ func main() {
 
 	//fmt.Printf("DEBUG:\tListening for completion until time is up in %s\n", config.RunDuration)
 	<-doneC
-	close(schedC)
-	close(responseC)
 
-	//fmt.Printf("INFO:\theyyall stopping goroutines\n")
+	// Give in-flight requests time to finish
+	// time.Sleep(time.Second * 2)
+	// stopping all goroutines
 	cancel()
 	// Give scheduler and responseHandler a bit of time to exit
 	time.Sleep(time.Millisecond * 20)
+	// Clean up all channels
+	close(schedC)
+	close(responseC)
 
 	//fmt.Printf("INFO:\theyyall Exiting\n")
 	// Call from SIGTERMHandler

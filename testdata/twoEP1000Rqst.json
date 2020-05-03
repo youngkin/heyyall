@@ -1,19 +1,19 @@
 {
-    "Rate": 1,
-    "MaxConcurrentRqsts": 2,
-    "RunDuration": "2s",
-    "NumRequests": 2,
+    "Rate": 1000,
+    "MaxConcurrentRqsts": 50,
+    "RunDuration": "0s",
+    "NumRequests": 1000,
     "OutputType": "JSON",
     "Endpoints": [
         {
-            "URL": "http://google.com",
+            "URL": "http://accountd.kube/users",
             "Method": "GET",
             "RqstBody": "",
             "RqstPercent": 50,
             "NumRequests": 2
         },
         {
-            "URL": "http://google.com",
+            "URL": "http://accountd.kube/users/1",
             "Method": "GET",
             "RqstBody": "",
             "RqstPercent": 50,

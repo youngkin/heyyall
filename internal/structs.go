@@ -17,6 +17,5 @@ type Response struct {
 // Request contains the information needed to execute a request
 // to an endpoint and return the response.
 type Request struct {
-	EP        api.Endpoint
-	ResponseC chan Response
+	EP api.Endpoint
 }

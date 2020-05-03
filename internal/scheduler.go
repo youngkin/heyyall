@@ -17,6 +17,8 @@ type Scheduler struct {
 	Ctx context.Context
 	// SchedC is used to send requests to the Scheduler
 	SchedC chan Request
+	// ResponseC is used to send the results of a request to the response handler
+	ResponseC chan Response
 	// MaxConcurrentRqsts is the overall number of simulataneously
 	// running requests
 	MaxConcurrentRqsts int
@@ -31,7 +33,12 @@ type Scheduler struct {
 func (s Scheduler) Start() {
 	log.Debug().Msg("Scheduler starting")
 	s.concurrencySem = make(chan struct{}, s.MaxConcurrentRqsts)
-	s.client = http.Client{Timeout: time.Second * 5}
+	t := &http.Transport{
+		MaxIdleConnsPerHost: s.MaxConcurrentRqsts,
+		DisableCompression:  false,
+		DisableKeepAlives:   false,
+	}
+	s.client = http.Client{Transport: t, Timeout: time.Second * 15}
 	for {
 		select {
 		case <-s.Ctx.Done():
@@ -47,6 +54,10 @@ func (s Scheduler) Start() {
 
 func (s Scheduler) processRqst(rqst Request) {
 	//fmt.Printf("INFO:\tReceived request: %+v. STOP PRINTING THIS MESSAGE!!!!\n", rqst)
+	if len(rqst.EP.URL) == 0 {
+		log.Warn().Msgf("Scheduler - request contains an invalid endpoint %+v, URL is empty", rqst.EP)
+		return
+	}
 	req, err := http.NewRequest(rqst.EP.Method, rqst.EP.URL, bytes.NewBuffer([]byte(rqst.EP.RqstBody)))
 	if err != nil {
 		log.Warn().Err(err).Msgf("Scheduler unable to create http request")
@@ -55,11 +66,16 @@ func (s Scheduler) processRqst(rqst Request) {
 
 	start := time.Now()
 	resp, err := s.client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	if err != nil {
 		log.Warn().Err(err).Msgf("Scheduler: error sending request")
+		<-s.concurrencySem
 		return
 	}
-	rqst.ResponseC <- Response{
+
+	s.ResponseC <- Response{
 		HTTPStatus:      resp.StatusCode,
 		Endpoint:        api.Endpoint{URL: rqst.EP.URL, Method: rqst.EP.Method},
 		RequestDuration: time.Since(start),

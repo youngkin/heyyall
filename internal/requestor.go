@@ -25,8 +25,7 @@ type Requestor struct {
 	ctx context.Context
 	// schedC is a channel used to forward a request for sending to
 	// and endpoint
-	schedC    chan Request
-	responseC chan Response
+	schedC chan Request
 	// doneC is used by the Requestor to signal that it has completed the run,
 	// either in terms of load test run duration or total number of requests.
 	doneC chan struct{}
@@ -53,7 +52,7 @@ type Requestor struct {
 
 // NewRequestor returns a valid Requestor instance
 func NewRequestor(ctx context.Context, doneC chan struct{}, schedC chan Request,
-	responseC chan Response, rate int, runDur string, numRqsts int, eps []api.Endpoint) (Requestor, error) {
+	rate int, runDur string, numRqsts int, eps []api.Endpoint) (Requestor, error) {
 
 	dur, err := time.ParseDuration(runDur)
 	if err != nil {
@@ -96,7 +95,6 @@ func NewRequestor(ctx context.Context, doneC chan struct{}, schedC chan Request,
 	rqstor := Requestor{
 		ctx:       ctx,
 		schedC:    schedC,
-		responseC: responseC,
 		doneC:     doneC,
 		rate:      rate,
 		runDur:    dur,
@@ -118,9 +116,9 @@ func (r Requestor) Start() {
 	rqstsToProcess := r.numRqsts
 	if r.numRqsts > 0 {
 		for i := 0; i < rqstsToProcess; i++ {
-			nextRqst, ok := getNextRqst(r.rqstSched, i)
+			nextRqst, ok := r.getNextRqst(i % r.numRqsts)
 			if !ok {
-				log.Debug().Msgf("Requestor - no requests at Requestor.freqs[%d]", i)
+				log.Warn().Msgf("Requestor - no requests at Requestor.freqs[%d]", i)
 				// increment limit so that we don't count this empty cell as a request
 				rqstsToProcess++
 				continue
@@ -131,7 +129,7 @@ func (r Requestor) Start() {
 			select {
 			case <-r.ctx.Done():
 				return
-			case r.schedC <- Request{EP: nextRqst.ep, ResponseC: r.responseC}:
+			case r.schedC <- Request{EP: nextRqst.ep}:
 				// fmt.Printf("DEBUG:\tSent Request for %+v\n", nextRqst.ep)
 			}
 
@@ -148,7 +146,7 @@ func (r Requestor) Start() {
 	} else {
 		log.Debug().Msgf("Requestor goroutine will end in %d millis", r.runDur/time.Millisecond)
 		for i := 0; ; i++ {
-			nextRqst, ok := getNextRqst(r.rqstSched, i)
+			nextRqst, ok := r.getNextRqst(i % r.numRqsts)
 			if !ok {
 				log.Debug().Msgf("Requestor - no requests at Requestor.freqs[%d]", i)
 				// increment limit so that we don't count this empty cell as a request
@@ -165,7 +163,7 @@ func (r Requestor) Start() {
 				log.Debug().Msgf("Requestor - time's up after %d millis. Sending DONE signal", time.Since(loopStart)/time.Millisecond)
 				close(r.doneC)
 				return
-			case r.schedC <- Request{EP: nextRqst.ep, ResponseC: r.responseC}:
+			case r.schedC <- Request{EP: nextRqst.ep}:
 				// fmt.Printf("DEBUG:\tSent Request for %+v\n", nextRqst.ep)
 			}
 
@@ -189,8 +187,10 @@ func (r Requestor) Start() {
 	close(r.doneC)
 }
 
-func getNextRqst(freqs map[int][]rqstItem, idx int) (rqstItem, bool) {
-	candidateRqsts, ok := freqs[idx]
+func (r Requestor) getNextRqst(iter int) (rqstItem, bool) {
+	idx := iter % r.numRqsts
+	log.Debug().Msgf("Requestor.getNextRequest - idx: %d", idx)
+	candidateRqsts, ok := r.rqstSched[idx]
 	if !ok {
 		// TODO:
 		// There may be holes in the map, i.e., nothing to send this
@@ -205,19 +205,19 @@ func getNextRqst(freqs map[int][]rqstItem, idx int) (rqstItem, bool) {
 	if len(candidateRqsts) > 1 {
 		// We won't be back this way again, carry any outstanding
 		// requests forward. Eventually we'll hit a hole and fill it.
-		freqs[idx+1] = freqs[idx][1:]
+		r.rqstSched[(idx+1)%r.numRqsts] = r.rqstSched[idx][1:]
 	}
-	delete(freqs, idx)
+	delete(r.rqstSched, idx)
 
 	// Before moving on, we need to schedule the next time this
-	// request should be scheduled.
-	nextSchedIteration := idx + nextRqst.freq
-	if _, ok := freqs[nextSchedIteration]; !ok {
-		freqs[nextSchedIteration] = make([]rqstItem, 0)
+	// request should be scheduled. To keep the
+	nextSchedIteration := (idx + nextRqst.freq) % r.numRqsts
+	if _, ok := r.rqstSched[nextSchedIteration]; !ok {
+		r.rqstSched[nextSchedIteration] = make([]rqstItem, 0)
 	}
-	log.Debug().Msgf("Requestor - SCHEDULING rqst %s from current location %d for freq %d to location %d\n",
+	log.Debug().Msgf("Requestor - SCHEDULING rqst %s from current location %d for freq %d to location %d",
 		nextRqst.ep.URL, idx, nextRqst.freq, nextSchedIteration)
-	freqs[nextSchedIteration] = append(freqs[nextSchedIteration], nextRqst)
+	r.rqstSched[nextSchedIteration] = append(r.rqstSched[nextSchedIteration], nextRqst)
 
 	return nextRqst, true
 }

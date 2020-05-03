@@ -15,33 +15,17 @@ import (
 type EndpointSummary struct {
 	URL string
 	// Method is the HTTP Method (e.g., GET, PUT, POST, DELETE)
-	Method        string
-	totalDuration time.Duration
+	Method string
+	// totalRequestDuration is the sum of all request run durations in seconds
+	totalRequestDuration time.Duration
 	// URL is the endpoint URL
 	// HTTPStatusDist is a map of HTTP Status (e.g., 200, 201, 404, etc)
 	// to the number of occurrences (value) for a given status (key)
 	HTTPStatusDist map[int]int
 	// TotalRqsts is the overall number of requests made during the run
 	TotalRqsts int64
-	// TotalDuration is the overall run duration in seconds
-	TotalDuration string
-	// MaxRqstDuration is the longest request duration in microseconds
-	maxRqstDuration time.Duration
-	MaxRqstDuration string
-	// MinRqstDuration is the smallest request duration in microseconds
-	minRqstDuration time.Duration
-	MinRqstDuration string
-	// AvgRqstDuration is the average duration of a request in microseconds
-	AvgRqstDuration string
-}
-
-// Stats is used to report detailed statistics from a load
-// test run
-type Stats struct {
-	// TotalRqsts is the overall number of requests made during the run
-	TotalRqsts int64
-	// TotalDuration is the overall run duration in seconds
-	TotalDuration string
+	// TotalRequestDuration is the sum of all request run durations in seconds
+	TotalRequestDuration string
 	// MaxRqstDuration is the longest request duration in microseconds
 	maxRqstDuration time.Duration
 	MaxRqstDuration string
@@ -58,6 +42,8 @@ type RunSummary struct {
 	// RqstRatePerSec is the overall request rate per second
 	// rounded to the nearest integer
 	RqstRatePerSec float64
+	// RunDuration is the wall clock time of the test in seconds
+	RunDuration string
 	// ResponseDistribution is distribution of response times. There will be
 	// 11 bucket; 10 microseconds or less, between 10us and 100us,
 	// 100us and 1ms, 1ms to 10ms, 10ms to 100ms, 100ms to 1s, 1s to 1.1s,
@@ -73,8 +59,8 @@ type RunSummary struct {
 	//MinRqstRatePerSec int
 	// TotalRqsts is the overall number of requests made during the run
 	TotalRqsts int64
-	// TotalDuration is the overall run duration in seconds
-	TotalDuration string
+	// TotalRequestDuration is the sum of all request run durations in seconds
+	TotalRequestDuration string
 	// MaxRqstDuration is the longest request duration in microseconds
 	maxRqstDuration time.Duration
 	MaxRqstDuration string
@@ -107,46 +93,10 @@ func (rh ResponseHandler) Start() {
 	runSummary.EndpointOverviewSummary = make(map[string]map[string]int)
 
 	var totalDurationSummary time.Duration
+	start := time.Now()
 
 	for {
 		select {
-		case <-rh.Ctx.Done():
-			runSummary.TotalDuration = totalDurationSummary.String()
-			runSummary.MaxRqstDuration = runSummary.maxRqstDuration.String()
-			runSummary.MinRqstDuration = runSummary.minRqstDuration.String()
-			avgRqstDuration := time.Duration(0)
-			if runSummary.TotalRqsts > 0 {
-				avgRqstDuration = totalDurationSummary / time.Duration(runSummary.TotalRqsts)
-			}
-			runSummary.AvgRqstDuration = avgRqstDuration.String()
-
-			// run times shorter than 1 second will result in a 'RqstRatePerSec' being zero due to rounding
-			runDurInSecs := totalDurationSummary / time.Second
-			if runDurInSecs > 0 {
-				runSummary.RqstRatePerSec = float64(runSummary.TotalRqsts / int64(runDurInSecs))
-			}
-			runSummary.EndpointRunSummary = epRunSummary
-
-			for _, epSumm := range epRunSummary {
-				epSumm.MaxRqstDuration = epSumm.maxRqstDuration.String()
-				epSumm.MinRqstDuration = epSumm.minRqstDuration.String()
-				epSumm.AvgRqstDuration = "0s"
-				if epSumm.TotalRqsts > 0 {
-					epSumm.AvgRqstDuration = (epSumm.totalDuration / time.Duration(epSumm.TotalRqsts)).String()
-				}
-				epSumm.TotalDuration = epSumm.totalDuration.String()
-				log.Debug().Msgf("EndpointSummary: %+v", epSumm)
-			}
-
-			rsjson, err := json.Marshal(runSummary)
-			if err != nil {
-				fmt.Printf("error marshaling RunSummary into string: %+v. Error: %s\n", runSummary, err)
-				return
-			}
-
-			// fmt.Printf("Run Summary:\n\n")
-			fmt.Printf("%s\n", rsjson)
-			return
 		case resp := <-rh.ResponseC:
 			runSummary.TotalRqsts++
 			totalDurationSummary = totalDurationSummary + resp.RequestDuration
@@ -179,7 +129,7 @@ func (rh ResponseHandler) Start() {
 			}
 
 			epSumm.TotalRqsts++
-			epSumm.totalDuration = epSumm.totalDuration + resp.RequestDuration
+			epSumm.totalRequestDuration = epSumm.totalRequestDuration + resp.RequestDuration
 
 			if resp.RequestDuration > epSumm.maxRqstDuration {
 				epSumm.maxRqstDuration = resp.RequestDuration
@@ -196,6 +146,46 @@ func (rh ResponseHandler) Start() {
 
 			// fmt.Printf("DEBUG:\tEndpointSummary: %+v\n", epSumm)
 			// fmt.Printf("\tEPRunStatus: %+v\n", *epSumm.EPRunStats)
+		case <-rh.Ctx.Done():
+			runTime := time.Since(start)
+			runSummary.RunDuration = runTime.String()
+			runSummary.TotalRequestDuration = totalDurationSummary.String()
+			runSummary.MaxRqstDuration = runSummary.maxRqstDuration.String()
+			runSummary.MinRqstDuration = runSummary.minRqstDuration.String()
+			avgRqstDuration := time.Duration(0)
+			if runSummary.TotalRqsts > 0 {
+				avgRqstDuration = totalDurationSummary / time.Duration(runSummary.TotalRqsts)
+			}
+			runSummary.AvgRqstDuration = avgRqstDuration.String()
+
+			// run times shorter than 1 second will result in a 'RqstRatePerSec' being zero due to rounding
+			runDurInMillis := runTime / time.Millisecond
+			if runDurInMillis > 0 {
+				runSummary.RqstRatePerSec = (float64(runSummary.TotalRqsts) / float64(runTime)) * float64(time.Second)
+			}
+			log.Warn().Msgf("NumRqsts: %d, RunDur in millis: %d, Rqsts/millis: %f, TotalRqsts/RunDur: %f", runSummary.TotalRqsts, int64(runDurInMillis), runSummary.RqstRatePerSec, float64(runSummary.TotalRqsts)/float64(runDurInMillis))
+			runSummary.EndpointRunSummary = epRunSummary
+
+			for _, epSumm := range epRunSummary {
+				epSumm.MaxRqstDuration = epSumm.maxRqstDuration.String()
+				epSumm.MinRqstDuration = epSumm.minRqstDuration.String()
+				epSumm.AvgRqstDuration = "0s"
+				if epSumm.TotalRqsts > 0 {
+					epSumm.AvgRqstDuration = (epSumm.totalRequestDuration / time.Duration(epSumm.TotalRqsts)).String()
+				}
+				epSumm.TotalRequestDuration = epSumm.totalRequestDuration.String()
+				log.Debug().Msgf("EndpointSummary: %+v", epSumm)
+			}
+
+			rsjson, err := json.Marshal(runSummary)
+			if err != nil {
+				fmt.Printf("error marshaling RunSummary into string: %+v. Error: %s\n", runSummary, err)
+				return
+			}
+
+			// fmt.Printf("Run Summary:\n\n")
+			fmt.Printf("%s\n", rsjson)
+			return
 		}
 	}
 }
