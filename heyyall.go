@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"io/ioutil"
+	"net/http"
 	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -23,6 +26,7 @@ func main() {
 	zerolog.SetGlobalLevel(zerolog.Level(*logLevel))
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.StampMilli})
 
+	// TODO: Make this configurable
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	log.Info().Msgf("heyyall started with config from %s", *configFile)
@@ -41,59 +45,51 @@ func main() {
 		return
 	}
 
-	//fmt.Printf("INFO:\tConfig: %+v\n", config)
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	responseC := make(chan internal.Response, config.MaxConcurrentRqsts)
 	doneC := make(chan struct{})
-	schedC := make(chan internal.Request)
 
 	responseHandler := internal.ResponseHandler{
 		Ctx:       ctx,
 		ResponseC: responseC,
+		DoneC:     doneC,
 	}
 	go responseHandler.Start()
 	// Give responseHandler a bit of time to start
 	time.Sleep(time.Millisecond * 20)
 
-	scheduler := internal.Scheduler{
-		MaxConcurrentRqsts: config.MaxConcurrentRqsts,
-		Ctx:                ctx,
-		SchedC:             schedC,
-		ResponseC:          responseC,
+	// TODO: Make Transport configurable, including timeout that's currently on the client below
+	t := &http.Transport{
+		MaxIdleConnsPerHost: config.MaxConcurrentRqsts,
+		DisableCompression:  false,
+		DisableKeepAlives:   false,
 	}
-	go scheduler.Start()
-	// Give scheduler a bit of time to start
-	time.Sleep(time.Millisecond * 20)
+	client := http.Client{Transport: t, Timeout: time.Second * 15}
 
-	requestor, err := internal.NewRequestor(ctx, doneC, schedC,
-		config.Rate, config.RunDuration, config.NumRequests, config.Endpoints)
+	rqstr := internal.Requestor{
+		Ctx:       ctx,
+		ResponseC: responseC,
+		Client:    client,
+	}
+
+	scheduler, err := internal.NewScheduler(config.MaxConcurrentRqsts, config.RqstRate, config.RunDuration,
+		config.NumRequests, config.Endpoints, rqstr)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Unexpected error configuring new Requestor")
-		close(schedC)
-		close(responseC)
 		cancel()
 		return
 	}
-	go requestor.Start()
-	// Give requestor a bit of time to start
-	time.Sleep(time.Millisecond * 20)
+	go scheduler.Start()
 
-	//fmt.Printf("DEBUG:\tListening for completion until time is up in %s\n", config.RunDuration)
-	<-doneC
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
-	// Give in-flight requests time to finish
-	// time.Sleep(time.Second * 2)
-	// stopping all goroutines
-	cancel()
-	// Give scheduler and responseHandler a bit of time to exit
-	time.Sleep(time.Millisecond * 20)
-	// Clean up all channels
-	close(schedC)
-	close(responseC)
-
-	//fmt.Printf("INFO:\theyyall Exiting\n")
-	// Call from SIGTERMHandler
-	// close(closeC)
+	select {
+	case <-sigs:
+		cancel()
+		close(responseC)
+	case <-doneC:
+		close(responseC)
+	}
 }

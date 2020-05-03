@@ -1,85 +1,128 @@
 package internal
 
 import (
-	"bytes"
-	"context"
-	"net/http"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/youngkin/heyyall/api"
 )
 
-// Scheduler is the component that will schedule requests to endpoints. It
-// expects to be run as a goroutine.
-type Scheduler struct {
-	// Context is used to cancel the goroutine
-	Ctx context.Context
-	// SchedC is used to send requests to the Scheduler
-	SchedC chan Request
-	// ResponseC is used to send the results of a request to the response handler
-	ResponseC chan Response
-	// MaxConcurrentRqsts is the overall number of simulataneously
-	// running requests
-	MaxConcurrentRqsts int
-	client             http.Client
-	// concurrencySem is a semaphore (implemented via channels) to control max
-	// concurrent requests
-	concurrencySem chan struct{}
+// rqstItem contains the information needed to determine how often to send
+// requests to a given endpoint. It also includes the nextRunOffset iteration to
+// send the request. This 'nextRunOffset' interation will be recalculated after each
+// request is sent.
+type rqstItem struct {
+	freq int // 1 is every request, 2 is every other request, 10 is every 10th request...
+	ep   api.Endpoint
 }
 
-// Start begins a loop that schedules each request for forwarding
-// to the endpoint in the request
-func (s Scheduler) Start() {
-	log.Debug().Msg("Scheduler starting")
-	s.concurrencySem = make(chan struct{}, s.MaxConcurrentRqsts)
-	t := &http.Transport{
-		MaxIdleConnsPerHost: s.MaxConcurrentRqsts,
-		DisableCompression:  false,
-		DisableKeepAlives:   false,
+// Scheduler determines which requests to make over the schedC
+// channel based on each Endpoint's 'RqstPercent'
+type Scheduler struct {
+	// concurrency is the overall number of simulataneously
+	// running requests
+	concurrency int
+	// rqstRate is the desired overall requests per second
+	rqstRate int
+	// runDur is how long the test will run. It can be expressed
+	// in seconds or minutes as xs or xm where x is an integer (e.g.,
+	// 10s for 10 seconds, 5m for 5 minutes). If both numRqsts and
+	// runDur are specified then whichever one is met first will
+	// cause the run to cease. For example, if runDur is 10s and
+	// numRqsts is 200,000,000, if runDur expires before 200,000,000
+	// requests are made then the load test will finish at 10 seconds
+	// regardless of the number of requests specified.
+	runDur time.Duration
+	// numRqsts is the total number of requests to make. See runDur
+	// above for the behavior when both runDur and numRqsts are
+	// specified.
+	numRqsts int
+	// endpoints represents the set of endpoints getting requests
+	endpoints []api.Endpoint
+	// rqstr is responsible for making client requests to endpoints
+	rqstr Requestor
+}
+
+// NewScheduler returns a valid Scheduler instance
+func NewScheduler(concurrency int, rate int, runDur string, numRqsts int,
+	eps []api.Endpoint, rqstr Requestor) (*Scheduler, error) {
+
+	dur, err := time.ParseDuration(runDur)
+	if err != nil {
+		return nil, fmt.Errorf("Scheduler - runDur: %s, must be of the form xs or xm where x is an integer",
+			runDur)
 	}
-	s.client = http.Client{Transport: t, Timeout: time.Second * 15}
-	for {
-		select {
-		case <-s.Ctx.Done():
-			log.Debug().Msg("Scheduler received close signal, exiting")
-			return
-		case rqst := <-s.SchedC:
-			// Rqst ability to send off a request
-			s.concurrencySem <- struct{}{}
-			go s.processRqst(rqst)
+	err = validateConfig(concurrency, rate, dur, numRqsts, eps)
+	if err != nil {
+		return nil, err
+	}
+
+	schedlr := Scheduler{
+		concurrency: concurrency,
+		rqstRate:    rate,
+		runDur:      dur,
+		numRqsts:    numRqsts,
+		endpoints:   eps,
+		rqstr:       rqstr,
+	}
+	log.Debug().Msgf("Scheduler: %+v", schedlr)
+
+	return &schedlr, nil
+}
+
+// Start begins the scheduling process
+func (s Scheduler) Start() error {
+	var wg sync.WaitGroup
+
+	for _, ep := range s.endpoints {
+		numEPRqsts := 0
+		if s.numRqsts > 0 {
+			numEPRqsts = int(float64(s.numRqsts) * (float64(ep.RqstPercent) / float64(100)))
+			if numEPRqsts == 0 {
+				numEPRqsts = 1
+				log.Warn().Msgf("endpoint %s's request percentage is less than 1, it will be rounded to 1", ep.URL)
+			}
+		}
+		epConcurrency := s.concurrency * (ep.RqstPercent / 100)
+		if epConcurrency == 0 {
+			return fmt.Errorf("endpoint %s's request percentage %d for the requested concurrency level %d must be at least 1. Concurrency is calcuated as an endpoint's request percentage times the overall requested concurrency level. In this case it is %f * %d = %f",
+				ep.URL, ep.RqstPercent, s.concurrency, float64(ep.RqstPercent)/float64(100),
+				s.concurrency, float64(ep.RqstPercent)/float64(100)*float64(s.concurrency))
+		}
+		if float64(epConcurrency) != float64(s.concurrency)*(float64(ep.RqstPercent)/float64(100)) {
+			log.Warn().Msgf("endpoint %s's concurrency is not an integer, rounding down so total concurrency will be less than requested. Concurrency is calcuated as an endpoint's request percentage times the overall requested concurrency level. In this case it is %f * %d = %f which was rounded down to %d",
+				ep.URL, float64(ep.RqstPercent)/float64(100), s.concurrency, float64(ep.RqstPercent)/float64(100)*float64(s.concurrency), epConcurrency)
+		}
+		for i := 0; i < epConcurrency; i++ {
+			wg.Add(1)
+			go func() {
+				s.rqstr.processRqst(ep, numEPRqsts/epConcurrency, s.runDur, s.rqstRate/epConcurrency)
+				wg.Done()
+			}()
 		}
 	}
+
+	wg.Wait()
+	close(s.rqstr.ResponseC)
+
+	return nil
 }
 
-func (s Scheduler) processRqst(rqst Request) {
-	//fmt.Printf("INFO:\tReceived request: %+v. STOP PRINTING THIS MESSAGE!!!!\n", rqst)
-	if len(rqst.EP.URL) == 0 {
-		log.Warn().Msgf("Scheduler - request contains an invalid endpoint %+v, URL is empty", rqst.EP)
-		return
+func validateConfig(concurrency int, rate int, runDur time.Duration, numRqsts int, eps []api.Endpoint) error {
+	if numRqsts > 0 && runDur > 0 {
+		return fmt.Errorf("number of requests is %d and requested duration is %s, one must be zero",
+			numRqsts, runDur)
 	}
-	req, err := http.NewRequest(rqst.EP.Method, rqst.EP.URL, bytes.NewBuffer([]byte(rqst.EP.RqstBody)))
-	if err != nil {
-		log.Warn().Err(err).Msgf("Scheduler unable to create http request")
-		return
+	if numRqsts < concurrency {
+		return fmt.Errorf("number of requests %d, must be greater than the concurrency level %d", numRqsts, concurrency)
 	}
-
-	start := time.Now()
-	resp, err := s.client.Do(req)
-	if resp != nil {
-		defer resp.Body.Close()
+	if len(eps) > numRqsts {
+		return fmt.Errorf("there are more endpoints, %d, than requests, %d", len(eps), numRqsts)
 	}
-	if err != nil {
-		log.Warn().Err(err).Msgf("Scheduler: error sending request")
-		<-s.concurrencySem
-		return
+	if concurrency%len(eps) != 0 {
+		return fmt.Errorf("each endpoint must run in it's own thread and endpoints must distribute evenly across all threads. There are %d threads and %d endpoints", concurrency, len(eps))
 	}
-
-	s.ResponseC <- Response{
-		HTTPStatus:      resp.StatusCode,
-		Endpoint:        api.Endpoint{URL: rqst.EP.URL, Method: rqst.EP.Method},
-		RequestDuration: time.Since(start),
-	}
-	// signal a request has completed processing
-	<-s.concurrencySem
+	return nil
 }

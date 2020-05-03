@@ -26,8 +26,8 @@ type Endpoint struct {
 // LoadTestConfig contains all the information needed to configure
 // and execute a load test run
 type LoadTestConfig struct {
-	// Rate is the desired overall requests per second
-	Rate int
+	// RqstRate is the desired overall requests per second
+	RqstRate int
 	// MaxConcurrentRqsts is the overall number of simulataneously
 	// running requests
 	MaxConcurrentRqsts int
