@@ -1,3 +1,9 @@
+// Copyright (c) 2020 Richard Youngkin. All rights reserved.
+// Use of this source code is governed by a MIT-style
+// license that can be found in the LICENSE file.
+
+// package api provides the public datastructures that can be used to
+// create a runtime configuration file.
 package api
 
 // Endpoint contains the information needed to to send a request,
