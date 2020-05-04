@@ -1,3 +1,7 @@
+// Copyright (c) 2020 Richard Youngkin. All rights reserved.
+// Use of this source code is governed by a MIT-style
+// license that can be found in the LICENSE file.
+
 package internal
 
 import (
@@ -5,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -94,11 +99,13 @@ func (rh ResponseHandler) Start() {
 	runSummary.EndpointOverviewSummary = make(map[string]map[string]int)
 
 	var totalDurationSummary time.Duration
-	start := time.Now()
+	var once sync.Once
+	var start time.Time
 
 	for {
 		select {
 		case resp, ok := <-rh.ResponseC:
+			once.Do(func() { start = time.Now() })
 			if !ok {
 				runTime := time.Since(start)
 				runSummary.RunDuration = runTime.String()
