@@ -5,7 +5,6 @@
 package internal
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -86,7 +85,6 @@ type RunSummary struct {
 // ResponseHandler is responsible for accepting, summarizing, and reporting
 // on the overall load test results.
 type ResponseHandler struct {
-	Ctx       context.Context
 	ResponseC chan Response
 	DoneC     chan struct{}
 }
@@ -102,50 +100,54 @@ func (rh ResponseHandler) Start() {
 	var once sync.Once
 	var start time.Time
 
+	finishFunc := func() {
+		runTime := time.Since(start)
+		runSummary.RunDuration = runTime.String()
+		runSummary.TotalRequestDuration = totalDurationSummary.String()
+		runSummary.MaxRqstDuration = runSummary.maxRqstDuration.String()
+		runSummary.MinRqstDuration = runSummary.minRqstDuration.String()
+		avgRqstDuration := time.Duration(0)
+		if runSummary.TotalRqsts > 0 {
+			avgRqstDuration = totalDurationSummary / time.Duration(runSummary.TotalRqsts)
+		}
+		runSummary.AvgRqstDuration = avgRqstDuration.String()
+
+		// run times shorter than 1 second will result in a 'RqstRatePerSec' being zero due to rounding
+		runDurInMillis := runTime / time.Millisecond
+		if runDurInMillis > 0 {
+			runSummary.RqstRatePerSec = (float64(runSummary.TotalRqsts) / float64(runTime)) * float64(time.Second)
+		}
+		log.Debug().Msgf("NumRqsts: %d, RunDur in millis: %d, Rqsts/millis: %f, TotalRqsts/RunDur: %f", runSummary.TotalRqsts, int64(runDurInMillis), runSummary.RqstRatePerSec, float64(runSummary.TotalRqsts)/float64(runDurInMillis))
+		runSummary.EndpointRunSummary = epRunSummary
+
+		for _, epSumm := range epRunSummary {
+			epSumm.MaxRqstDuration = epSumm.maxRqstDuration.String()
+			epSumm.MinRqstDuration = epSumm.minRqstDuration.String()
+			epSumm.AvgRqstDuration = "0s"
+			if epSumm.TotalRqsts > 0 {
+				epSumm.AvgRqstDuration = (epSumm.totalRequestDuration / time.Duration(epSumm.TotalRqsts)).String()
+			}
+			epSumm.TotalRequestDuration = epSumm.totalRequestDuration.String()
+			log.Debug().Msgf("EndpointSummary: %+v", epSumm)
+		}
+
+		rsjson, err := json.Marshal(runSummary)
+		if err != nil {
+			log.Error().Err(err).Msgf("error marshaling RunSummary into string: %+v.\n", runSummary)
+			return
+		}
+
+		fmt.Printf("%s\n", string(rsjson))
+		close(rh.DoneC)
+	}
+
 	for {
 		select {
 		case resp, ok := <-rh.ResponseC:
 			once.Do(func() { start = time.Now() })
 			if !ok {
-				runTime := time.Since(start)
-				runSummary.RunDuration = runTime.String()
-				runSummary.TotalRequestDuration = totalDurationSummary.String()
-				runSummary.MaxRqstDuration = runSummary.maxRqstDuration.String()
-				runSummary.MinRqstDuration = runSummary.minRqstDuration.String()
-				avgRqstDuration := time.Duration(0)
-				if runSummary.TotalRqsts > 0 {
-					avgRqstDuration = totalDurationSummary / time.Duration(runSummary.TotalRqsts)
-				}
-				runSummary.AvgRqstDuration = avgRqstDuration.String()
-
-				// run times shorter than 1 second will result in a 'RqstRatePerSec' being zero due to rounding
-				runDurInMillis := runTime / time.Millisecond
-				if runDurInMillis > 0 {
-					runSummary.RqstRatePerSec = (float64(runSummary.TotalRqsts) / float64(runTime)) * float64(time.Second)
-				}
-				log.Debug().Msgf("NumRqsts: %d, RunDur in millis: %d, Rqsts/millis: %f, TotalRqsts/RunDur: %f", runSummary.TotalRqsts, int64(runDurInMillis), runSummary.RqstRatePerSec, float64(runSummary.TotalRqsts)/float64(runDurInMillis))
-				runSummary.EndpointRunSummary = epRunSummary
-
-				for _, epSumm := range epRunSummary {
-					epSumm.MaxRqstDuration = epSumm.maxRqstDuration.String()
-					epSumm.MinRqstDuration = epSumm.minRqstDuration.String()
-					epSumm.AvgRqstDuration = "0s"
-					if epSumm.TotalRqsts > 0 {
-						epSumm.AvgRqstDuration = (epSumm.totalRequestDuration / time.Duration(epSumm.TotalRqsts)).String()
-					}
-					epSumm.TotalRequestDuration = epSumm.totalRequestDuration.String()
-					log.Debug().Msgf("EndpointSummary: %+v", epSumm)
-				}
-
-				rsjson, err := json.Marshal(runSummary)
-				if err != nil {
-					fmt.Printf("error marshaling RunSummary into string: %+v. Error: %s\n", runSummary, err)
-					return
-				}
-
-				// fmt.Printf("Run Summary:\n\n")
-				fmt.Printf("%s\n", rsjson)
-				close(rh.DoneC)
+				log.Info().Msg("ResponseHandler: Summarizing results and exiting")
+				finishFunc()
 				return
 			}
 

@@ -26,11 +26,20 @@ type Requestor struct {
 	Client http.Client
 }
 
-func (r Requestor) processRqst(ep api.Endpoint, numRqsts int, runDur time.Duration, rqstRate int) {
+// ResponseChan returns a chan Response
+func (r Requestor) ResponseChan() chan Response {
+	return r.ResponseC
+}
+
+// ProcessRqst runs the requests configured by 'ep' at the requested rate for either
+// 'numRqsts' times or 'runDur' duration
+func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Duration, rqstRate int) {
 	if len(ep.URL) == 0 || len(ep.Method) == 0 {
 		log.Warn().Msgf("Requestor - request contains an invalid endpoint %+v, URL or Method is empty", ep)
 		return
 	}
+
+	// TODO: Add context to request
 	req, err := http.NewRequest(ep.Method, ep.URL, bytes.NewBuffer([]byte(ep.RqstBody)))
 	if err != nil {
 		log.Warn().Err(err).Msgf("Requestor unable to create http request")
@@ -39,7 +48,7 @@ func (r Requestor) processRqst(ep api.Endpoint, numRqsts int, runDur time.Durati
 
 	// At this point we know one of numRqsts or runDur is non-zero. Whichever one
 	// is non-zero will be set to a super-high number to effectively disable its
-	// test in the for-loop
+	// test in the for-loop below
 	if numRqsts == 0 {
 		numRqsts = math.MaxInt64
 	}
@@ -56,10 +65,14 @@ func (r Requestor) processRqst(ep api.Endpoint, numRqsts int, runDur time.Durati
 		}
 		if err != nil {
 			log.Warn().Err(err).Msgf("Requestor: error sending request")
-			return
+			return // TODO: Should return here? This assumes that the error is persistent
 		}
 		select {
+		case <-r.Ctx.Done():
+			log.Debug().Msg("Requestor cancelled, exiting")
+			return
 		case <-timesUp:
+			log.Debug().Msg("Requestor runDur expired, exiting")
 			return
 		case r.ResponseC <- Response{
 			HTTPStatus:      resp.StatusCode,

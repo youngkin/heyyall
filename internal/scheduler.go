@@ -6,6 +6,7 @@ package internal
 
 import (
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -13,13 +14,10 @@ import (
 	"github.com/youngkin/heyyall/api"
 )
 
-// rqstItem contains the information needed to determine how often to send
-// requests to a given endpoint. It also includes the nextRunOffset iteration to
-// send the request. This 'nextRunOffset' interation will be recalculated after each
-// request is sent.
-type rqstItem struct {
-	freq int // 1 is every request, 2 is every other request, 10 is every 10th request...
-	ep   api.Endpoint
+// IRequestor declares the functionality needed to make requests to an endpoint
+type IRequestor interface {
+	ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Duration, rqstRate int)
+	ResponseChan() chan Response
 }
 
 // Scheduler determines which requests to make over the schedC
@@ -46,16 +44,16 @@ type Scheduler struct {
 	// endpoints represents the set of endpoints getting requests
 	endpoints []api.Endpoint
 	// rqstr is responsible for making client requests to endpoints
-	rqstr Requestor
+	rqstr IRequestor
 }
 
 // NewScheduler returns a valid Scheduler instance
 func NewScheduler(concurrency int, rate int, runDur string, numRqsts int,
-	eps []api.Endpoint, rqstr Requestor) (*Scheduler, error) {
+	eps []api.Endpoint, rqstr IRequestor) (*Scheduler, error) {
 
 	dur, err := time.ParseDuration(runDur)
 	if err != nil {
-		return nil, fmt.Errorf("Scheduler - runDur: %s, must be of the form xs or xm where x is an integer",
+		return nil, fmt.Errorf("runDur: %s, must be of the form 'xs' or xm where 'x' is an integer and 's' indicates seconds and 'm' indicates minutes",
 			runDur)
 	}
 	err = validateConfig(concurrency, rate, dur, numRqsts, eps)
@@ -81,37 +79,54 @@ func (s Scheduler) Start() error {
 	var wg sync.WaitGroup
 
 	for _, ep := range s.endpoints {
-		numEPRqsts := 0
-		if s.numRqsts > 0 {
-			numEPRqsts = int(float64(s.numRqsts) * (float64(ep.RqstPercent) / float64(100)))
-			if numEPRqsts == 0 {
-				numEPRqsts = 1
-				log.Warn().Msgf("endpoint %s's request percentage is less than 1, it will be rounded to 1", ep.URL)
-			}
-		}
-		epConcurrency := s.concurrency * (ep.RqstPercent / 100)
-		if epConcurrency == 0 {
-			return fmt.Errorf("endpoint %s's request percentage %d for the requested concurrency level %d must be at least 1. Concurrency is calcuated as an endpoint's request percentage times the overall requested concurrency level. In this case it is %f * %d = %f",
-				ep.URL, ep.RqstPercent, s.concurrency, float64(ep.RqstPercent)/float64(100),
-				s.concurrency, float64(ep.RqstPercent)/float64(100)*float64(s.concurrency))
-		}
-		if float64(epConcurrency) != float64(s.concurrency)*(float64(ep.RqstPercent)/float64(100)) {
-			log.Warn().Msgf("endpoint %s's concurrency is not an integer, rounding down so total concurrency will be less than requested. Concurrency is calcuated as an endpoint's request percentage times the overall requested concurrency level. In this case it is %f * %d = %f which was rounded down to %d",
-				ep.URL, float64(ep.RqstPercent)/float64(100), s.concurrency, float64(ep.RqstPercent)/float64(100)*float64(s.concurrency), epConcurrency)
-		}
+		numRqstsPerGoroutine, epConcurrency, goroutineRqstRate := s.calcEPConfig(ep)
+
 		for i := 0; i < epConcurrency; i++ {
 			wg.Add(1)
 			go func() {
-				s.rqstr.processRqst(ep, numEPRqsts/epConcurrency, s.runDur, s.rqstRate/epConcurrency)
+				s.rqstr.ProcessRqst(ep, numRqstsPerGoroutine, s.runDur, goroutineRqstRate)
 				wg.Done()
 			}()
 		}
 	}
 
 	wg.Wait()
-	close(s.rqstr.ResponseC)
+	close(s.rqstr.ResponseChan())
 
 	return nil
+}
+
+func (s Scheduler) calcEPConfig(ep api.Endpoint) (numRqstsPerGoroutine int, numEPGoroutines int, epGoroutineRqstRate int) {
+	numEPGoroutines = int(math.Ceil(float64(s.concurrency) * (float64(ep.RqstPercent) / float64(100))))
+	if numEPGoroutines != int(float64(s.concurrency)*(float64(ep.RqstPercent)/float64(100))) {
+		log.Warn().Msgf("epConcurrency, %d, was rounded up. The calcuation result was %f", numEPGoroutines,
+			float64(s.concurrency)*(float64(ep.RqstPercent)/float64(100)))
+	}
+
+	numEPRqsts := int(math.Ceil(float64(s.numRqsts) * (float64(ep.RqstPercent) / float64(100))))
+	if numEPRqsts != int(float64(s.numRqsts)*(float64(ep.RqstPercent)/float64(100))) {
+		log.Warn().Msgf("numEPRqsts, %d, was rounded up. The calcuation result was %f", numEPRqsts,
+			float64(s.numRqsts)*(float64(ep.RqstPercent)/float64(100)))
+	}
+
+	numRqstsPerGoroutine = int(math.Ceil((float64(numEPRqsts) / float64(numEPGoroutines))))
+	if numRqstsPerGoroutine != int((float64(numEPRqsts) / float64(numEPGoroutines))) {
+		log.Warn().Msgf("numGoRoutineRqsts, %d, was rounded up. The calculation result was %f", numRqstsPerGoroutine,
+			(float64(numEPRqsts) / float64(numEPGoroutines)))
+	}
+
+	epRqstRate := int(math.Ceil(float64(s.rqstRate) * (float64(ep.RqstPercent) / float64(100))))
+	if epRqstRate != int(float64(s.rqstRate)*(float64(ep.RqstPercent)/float64(100))) {
+		log.Warn().Msgf("epRqstRate, %d, was rounded up. The calculation result was %f", epRqstRate,
+			float64(s.concurrency)*(float64(ep.RqstPercent)/float64(100)))
+	}
+
+	epGoroutineRqstRate = int(math.Ceil((float64(epRqstRate) / float64(numEPGoroutines))))
+	if epGoroutineRqstRate != int((float64(epRqstRate) / float64(numEPGoroutines))) {
+		log.Warn().Msgf("epGoroutineRqstRate, %d, was rounded up. The calculation result was %f", epGoroutineRqstRate,
+			(float64(epRqstRate) / float64(numEPGoroutines)))
+	}
+	return numRqstsPerGoroutine, numEPGoroutines, epGoroutineRqstRate
 }
 
 func validateConfig(concurrency int, rate int, runDur time.Duration, numRqsts int, eps []api.Endpoint) error {

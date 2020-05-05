@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -29,25 +30,15 @@ func main() {
 
 	zerolog.SetGlobalLevel(zerolog.Level(*logLevel))
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.StampMilli})
+	log.Info().Msgf("heyyall started with config from %s", *configFile)
+
+	config, err := getConfig(*configFile)
+	if err != nil {
+		log.Fatal().Err(err).Msg("error loading configuration")
+	}
 
 	// TODO: Make this configurable
 	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	log.Info().Msgf("heyyall started with config from %s", *configFile)
-
-	contents, err := ioutil.ReadFile(*configFile)
-	if err != nil {
-		log.Fatal().Err(err).Msgf("unable to read config file %s", *configFile)
-		return
-	}
-
-	log.Debug().Msgf("Raw config file contents: %s", string(contents))
-
-	config := api.LoadTestConfig{}
-	if err = json.Unmarshal(contents, &config); err != nil {
-		log.Fatal().Err(err).Msgf("error unmarshaling test config bytes: %s", string(contents))
-		return
-	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -55,7 +46,6 @@ func main() {
 	doneC := make(chan struct{})
 
 	responseHandler := internal.ResponseHandler{
-		Ctx:       ctx,
 		ResponseC: responseC,
 		DoneC:     doneC,
 	}
@@ -91,9 +81,27 @@ func main() {
 
 	select {
 	case <-sigs:
+		signal.Stop(sigs)
+		log.Debug().Msg("heyyall: SIGTERM caught")
 		cancel()
-		close(responseC)
+		<-doneC // Wait for graceful shutdown to complete
 	case <-doneC:
-		close(responseC)
 	}
+
+	log.Info().Msg("heyyall: DONE")
+}
+
+func getConfig(fileName string) (api.LoadTestConfig, error) {
+	contents, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		return api.LoadTestConfig{}, fmt.Errorf("unable to read config file %s", fileName)
+	}
+
+	log.Debug().Msgf("Raw config file contents: %s", string(contents))
+
+	config := api.LoadTestConfig{}
+	if err = json.Unmarshal(contents, &config); err != nil {
+		return api.LoadTestConfig{}, fmt.Errorf("error unmarshaling test config bytes: %s", string(contents))
+	}
+	return config, nil
 }
