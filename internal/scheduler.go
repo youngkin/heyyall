@@ -141,7 +141,7 @@ func validateConfig(concurrency int, rate int, runDur time.Duration, numRqsts in
 		return fmt.Errorf("there are more endpoints, %d, than requests, %d", len(eps), numRqsts)
 	}
 	if concurrency%len(eps) != 0 {
-		return fmt.Errorf("each endpoint must run in it's own thread and endpoints must distribute evenly across all threads. There are %d threads and %d endpoints", concurrency, len(eps))
+		return fmt.Errorf("each endpoint must run in it's own goroutine and endpoints must distribute evenly across all goroutines. There are %d goroutines and %d endpoints", concurrency, len(eps))
 	}
 	return nil
 }
