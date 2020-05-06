@@ -39,16 +39,13 @@ type LoadTestConfig struct {
 	MaxConcurrentRqsts int
 	// RunDuration is how long the test will run. It can be expressed
 	// in seconds or minutes as xs or xm where x is an integer (e.g.,
-	// 10s for 10 seconds, 5m for 5 minutes). If both NumRequests and
-	// RunDuration are specified then whichever one is met first will
-	// cause the run to cease. For example, if RunDuration is 10s and
-	// NumRequests is 200,000,000, if RunDuration expires before 200,000,000
-	// requests are made then the load test will finish at 10 seconds
-	// regardless of the number of requests specified.
+	// 10s for 10 seconds, 5m for 5 minutes). Only one of NumRequests or
+	// RunDuration can be specified. The tool will exit with an appropriate
+	// error message if this isn't true.
 	RunDuration string
-	// NumRequests is the total number of requests to make. See RunDuration
-	// above for the behavior when both RunDuration and NumRequests are
-	// specified.
+	// NumRequests is the total number of requests to make. Specifying
+	// both RunDuration and NumRequests is an error. See RunDuration
+	// above for a bit more info.
 	NumRequests int
 	// OutputType specifies if the output will be written in JSON or
 	// CSV format. Acceptable values are "JSON" and "CSV". If not
