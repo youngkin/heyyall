@@ -1,6 +1,6 @@
 {
-    "Rate": 10,
-    "MaxConcurrentRqsts": 5,
+    "RqstRate": 100,
+    "MaxConcurrentRqsts": 100,
     "RunDuration": "0s",
     "NumRequests": 100,
     "OutputType": "JSON",
@@ -16,49 +16,49 @@
             "URL": "http://accountd.kube/users/1",
             "Method": "GET",
             "RqstBody": "",
-            "RqstPercent": 10,
+            "RqstPercent": 20,
+            "NumRequests": 10
+        },
+        {
+            "URL": "http://accountd.kube/users/1",
+            "Method": "PUT",
+            "RqstBody": "{\"accountid\":1,\"id\":1,\"name\":\"mickey dolenz UPDATED\",\"email\":\"mickeyd@gmail.com\",\"role\":1}",
+            "RqstPercent": 5,
             "NumRequests": 10
         },
         {
             "URL": "http://accountd.kube/users/2",
             "Method": "GET",
             "RqstBody": "",
-            "RqstPercent": 10,
+            "RqstPercent": 5,
             "NumRequests": 10
         },
         {
             "URL": "http://accountd.kube/users/3",
             "Method": "GET",
             "RqstBody": "",
-            "RqstPercent": 10,
+            "RqstPercent": 5,
             "NumRequests": 10
         },
         {
             "URL": "http://accountd.kube/users/4",
             "Method": "GET",
             "RqstBody": "",
-            "RqstPercent": 10,
+            "RqstPercent": 2,
             "NumRequests": 10
         },
         {
             "URL": "http://accountd.kube/users/5",
             "Method": "GET",
             "RqstBody": "",
-            "RqstPercent": 10,
+            "RqstPercent": 3,
             "NumRequests": 10
         },
         {
             "URL": "http://accountd.kube/users/6",
             "Method": "GET",
             "RqstBody": "",
-            "RqstPercent": 10,
-            "NumRequests": 10
-        },
-        {
-            "URL": "http://accountd.kube/users/7",
-            "Method": "GET",
-            "RqstBody": "",
-            "RqstPercent": 10,
+            "RqstPercent": 30,
             "NumRequests": 10
         },
         {

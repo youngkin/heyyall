@@ -79,11 +79,15 @@ func (s Scheduler) Start() error {
 	var wg sync.WaitGroup
 
 	for _, ep := range s.endpoints {
+		ep := ep
 		numRqstsPerGoroutine, epConcurrency, goroutineRqstRate := s.calcEPConfig(ep)
-
 		for i := 0; i < epConcurrency; i++ {
 			wg.Add(1)
 			go func() {
+
+				log.Debug().Msgf("Starting Endpoint Goroutine for EP: %s numRqsts: %d, runDur: %d, and rqstRate: %d", ep.URL,
+					numRqstsPerGoroutine, s.runDur/time.Second, goroutineRqstRate)
+
 				s.rqstr.ProcessRqst(ep, numRqstsPerGoroutine, s.runDur, goroutineRqstRate)
 				wg.Done()
 			}()
@@ -99,32 +103,32 @@ func (s Scheduler) Start() error {
 func (s Scheduler) calcEPConfig(ep api.Endpoint) (numRqstsPerGoroutine int, numEPGoroutines int, epGoroutineRqstRate int) {
 	numEPGoroutines = int(math.Ceil(float64(s.concurrency) * (float64(ep.RqstPercent) / float64(100))))
 	if numEPGoroutines != int(float64(s.concurrency)*(float64(ep.RqstPercent)/float64(100))) {
-		log.Warn().Msgf("epConcurrency, %d, was rounded up. The calcuation result was %f", numEPGoroutines,
+		log.Warn().Msgf("EP: %s: epConcurrency, %d, was rounded up. The calcuation result was %f", ep.URL, numEPGoroutines,
 			float64(s.concurrency)*(float64(ep.RqstPercent)/float64(100)))
 	}
 
 	numEPRqsts := int(math.Ceil(float64(s.numRqsts) * (float64(ep.RqstPercent) / float64(100))))
 	if numEPRqsts != int(float64(s.numRqsts)*(float64(ep.RqstPercent)/float64(100))) {
-		log.Warn().Msgf("numEPRqsts, %d, was rounded up. The calcuation result was %f", numEPRqsts,
+		log.Warn().Msgf("EP: %s: numEPRqsts, %d, was rounded up. The calcuation result was %f", ep.URL, numEPRqsts,
 			float64(s.numRqsts)*(float64(ep.RqstPercent)/float64(100)))
 	}
 
 	numRqstsPerGoroutine = int(math.Ceil((float64(numEPRqsts) / float64(numEPGoroutines))))
 	if numRqstsPerGoroutine != int((float64(numEPRqsts) / float64(numEPGoroutines))) {
-		log.Warn().Msgf("numGoRoutineRqsts, %d, was rounded up. The calculation result was %f", numRqstsPerGoroutine,
+		log.Warn().Msgf("EP: %s: numGoRoutineRqsts, %d, was rounded up. The calculation result was %f", ep.URL, numRqstsPerGoroutine,
 			(float64(numEPRqsts) / float64(numEPGoroutines)))
 	}
 
 	epRqstRate := int(math.Ceil(float64(s.rqstRate) * (float64(ep.RqstPercent) / float64(100))))
 	if epRqstRate != int(float64(s.rqstRate)*(float64(ep.RqstPercent)/float64(100))) {
-		log.Warn().Msgf("epRqstRate, %d, was rounded up. The calculation result was %f", epRqstRate,
+		log.Warn().Msgf("EP: %s: epRqstRate, %d, was rounded up. The calculation result was %f", ep.URL, epRqstRate,
 			float64(s.concurrency)*(float64(ep.RqstPercent)/float64(100)))
 	}
 
 	epGoroutineRqstRate = int(math.Ceil((float64(epRqstRate) / float64(numEPGoroutines))))
 	if epGoroutineRqstRate != int((float64(epRqstRate) / float64(numEPGoroutines))) {
-		log.Warn().Msgf("epGoroutineRqstRate, %d, was rounded up. The calculation result was %f", epGoroutineRqstRate,
-			(float64(epRqstRate) / float64(numEPGoroutines)))
+		log.Warn().Msgf("EP: %s: epGoroutineRqstRate, %d, was rounded up. The calculation result was %f", ep.URL,
+			epGoroutineRqstRate, (float64(epRqstRate) / float64(numEPGoroutines)))
 	}
 	return numRqstsPerGoroutine, numEPGoroutines, epGoroutineRqstRate
 }
@@ -134,14 +138,22 @@ func validateConfig(concurrency int, rate int, runDur time.Duration, numRqsts in
 		return fmt.Errorf("number of requests is %d and requested duration is %s, one must be zero",
 			numRqsts, runDur)
 	}
-	if numRqsts < concurrency {
+	if runDur < 1 && numRqsts < concurrency {
 		return fmt.Errorf("number of requests %d, must be greater than the concurrency level %d", numRqsts, concurrency)
 	}
-	if len(eps) > numRqsts {
+	if runDur < 1 && len(eps) > numRqsts {
 		return fmt.Errorf("there are more endpoints, %d, than requests, %d", len(eps), numRqsts)
 	}
 	if concurrency%len(eps) != 0 {
 		return fmt.Errorf("each endpoint must run in it's own goroutine and endpoints must distribute evenly across all goroutines. There are %d goroutines and %d endpoints", concurrency, len(eps))
+	}
+
+	rqstPct := 0
+	for _, ep := range eps {
+		rqstPct += ep.RqstPercent
+	}
+	if rqstPct != 100 {
+		return fmt.Errorf("endpoint.RqstPercents must add up to 100 not %d", rqstPct)
 	}
 	return nil
 }

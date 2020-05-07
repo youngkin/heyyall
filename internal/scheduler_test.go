@@ -347,11 +347,35 @@ func TestValidation(t *testing.T) {
 			shouldFail: true,
 		},
 		{
+			name:        "SuccessPath - numRqsts < concurrency but RunDur > 0",
+			rqstRate:    goFastRate,
+			runDur:      "1s",
+			numRqsts:    0,
+			concurrency: 100,
+			eps: []api.Endpoint{
+				{
+					URL:         url1,
+					Method:      "GET",
+					RqstBody:    "",
+					RqstPercent: 80,
+					NumRequests: 5,
+				},
+				{
+					URL:         url2,
+					Method:      "PUT",
+					RqstBody:    "",
+					RqstPercent: 20,
+					NumRequests: 5,
+				},
+			},
+			shouldFail: false,
+		},
+		{
 			name:        "FailPath - len(eps) > numRqsts",
 			rqstRate:    goFastRate,
 			runDur:      "0s",
 			numRqsts:    2,
-			concurrency: 2,
+			concurrency: 3,
 			eps: []api.Endpoint{
 				{
 					URL:         url1,
@@ -378,6 +402,37 @@ func TestValidation(t *testing.T) {
 			shouldFail: true,
 		},
 		{
+			name:        "SuccessPath - len(eps) > numRqsts but RunDur > 0",
+			rqstRate:    goFastRate,
+			runDur:      "1s",
+			numRqsts:    0,
+			concurrency: 3,
+			eps: []api.Endpoint{
+				{
+					URL:         url1,
+					Method:      "GET",
+					RqstBody:    "",
+					RqstPercent: 80,
+					NumRequests: 5,
+				},
+				{
+					URL:         url2,
+					Method:      "PUT",
+					RqstBody:    "",
+					RqstPercent: 10,
+					NumRequests: 5,
+				},
+				{
+					URL:         url2,
+					Method:      "PUT",
+					RqstBody:    "",
+					RqstPercent: 10,
+					NumRequests: 5,
+				},
+			},
+			shouldFail: false,
+		},
+		{
 			name:        "FailPath - concurrency must be a multiple of len(eps) - otherwise some concurrency is lost",
 			rqstRate:    goFastRate,
 			runDur:      "0s",
@@ -401,6 +456,54 @@ func TestValidation(t *testing.T) {
 			},
 			shouldFail: true,
 		},
+		{
+			name:        "FailPath - EP Rqst Percent greater than 100",
+			rqstRate:    goFastRate,
+			runDur:      "0s",
+			numRqsts:    100,
+			concurrency: 100,
+			eps: []api.Endpoint{
+				{
+					URL:         url1,
+					Method:      "GET",
+					RqstBody:    "",
+					RqstPercent: 80,
+					NumRequests: 5,
+				},
+				{
+					URL:         url2,
+					Method:      "PUT",
+					RqstBody:    "",
+					RqstPercent: 30,
+					NumRequests: 5,
+				},
+			},
+			shouldFail: true,
+		},
+		{
+			name:        "FailPath - EP Rqst Percent less than 100",
+			rqstRate:    goFastRate,
+			runDur:      "0s",
+			numRqsts:    100,
+			concurrency: 100,
+			eps: []api.Endpoint{
+				{
+					URL:         url1,
+					Method:      "GET",
+					RqstBody:    "",
+					RqstPercent: 10,
+					NumRequests: 5,
+				},
+				{
+					URL:         url2,
+					Method:      "PUT",
+					RqstBody:    "",
+					RqstPercent: 30,
+					NumRequests: 5,
+				},
+			},
+			shouldFail: true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -410,7 +513,7 @@ func TestValidation(t *testing.T) {
 				tc.numRqsts, tc.eps, tc.rqstr)
 
 			if err == nil && tc.shouldFail == true {
-				t.Fatalf("unexpected success creating Scheduler: %s", err)
+				t.Fatalf("unexpected success creating Scheduler")
 			}
 			if err != nil && tc.shouldFail == false {
 				t.Fatalf("unexpected failure creating Scheduler: %s", err)

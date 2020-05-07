@@ -50,14 +50,17 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Durati
 	// is non-zero will be set to a super-high number to effectively disable its
 	// test in the for-loop below
 	if numRqsts == 0 {
+		log.Debug().Msgf("ProcessRqst: EP: %s, numRqsts %d was 0", ep.URL, numRqsts)
 		numRqsts = math.MaxInt64
 	}
 	if runDur == time.Duration(0) {
+		log.Debug().Msgf("ProcessRqst: EP: %s, runDur %d was 0", ep.URL, runDur/time.Second)
 		runDur = time.Duration(math.MaxInt64)
 	}
 
+	log.Debug().Msgf("Setting 'timesUp' duration to %d seconds", runDur/time.Second)
+	timesUp := time.After(runDur)
 	for i := 0; i < numRqsts; i++ {
-		timesUp := time.After(runDur)
 		start := time.Now()
 		resp, err := r.Client.Do(req)
 		if resp != nil {

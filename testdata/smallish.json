@@ -1,5 +1,5 @@
 {
-    "Rate": 10,
+    "RqstRate": 10,
     "MaxConcurrentRqsts": 5,
     "RunDuration": "0s",
     "NumRequests": 4,
