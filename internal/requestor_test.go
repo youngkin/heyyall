@@ -1,3 +1,7 @@
+// Copyright (c) 2020 Richard Youngkin. All rights reserved.
+// Use of this source code is governed by a MIT-style
+// license that can be found in the LICENSE file.
+
 package internal
 
 import (
@@ -19,7 +23,12 @@ func (s *srvHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func TestNumRqsts(t *testing.T) {
+// TestHappyPath verifies that the scheduler successfully makes a single
+// requestor request, via 'ProcessRqst()' and completes normally. To accomplish
+// this the goroutine running 'ProcessRqst()' must get a successful response
+// from a test HTTP server, send that response over a ResponseC channel, and
+// exit.
+func TestHappyPath(t *testing.T) {
 	ep := api.Endpoint{
 		Method:      "GET",
 		RqstPercent: 100,

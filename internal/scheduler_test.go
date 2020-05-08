@@ -1,3 +1,7 @@
+// Copyright (c) 2020 Richard Youngkin. All rights reserved.
+// Use of this source code is governed by a MIT-style
+// license that can be found in the LICENSE file.
+
 package internal
 
 import (
@@ -13,35 +17,6 @@ import (
 )
 
 var debugLevel = flag.Int("debugLvl", int(zerolog.ErrorLevel), "debug level - 0 thru 5 0 being DEBUG")
-
-// func scheduler(ctx context.Context, t *testing.T, tc TestCase, schedC chan Request, completeC chan bool) {
-// 	rqstDist := make(map[string]int)
-// 	iterations := 0
-// 	for {
-// 		select {
-// 		case <-ctx.Done():
-// 			if tc.runDur == "0s" && tc.numRqsts != iterations {
-// 				t.Errorf("expected %d requests, got %d", tc.numRqsts, iterations)
-// 				completeC <- false
-// 			}
-// 			for url := range tc.expectedDist {
-// 				if tc.expectedDist[url] != rqstDist[url] {
-// 					t.Errorf("expected %d requests for %s, got %d", tc.expectedDist[url], url, rqstDist[url])
-// 				}
-// 			}
-// 			completeC <- true
-// 			return
-// 		case rqst := <-schedC:
-// 			rqstDist[rqst.EP.URL]++
-// 			// idx := iterations % len(tc.eps)
-// 			// if tc.eps[idx] != rqst.EP {
-// 			// 	t.Errorf("expected %+v, got %+v", tc.eps[idx], rqst.EP)
-// 			// }
-// 			iterations++
-// 		}
-// 	}
-
-// }
 
 type MockRequestor struct {
 	responseC         chan Response
@@ -536,7 +511,7 @@ func TestRqstrInteractions(t *testing.T) {
 	rqstr := &MockRequestor{responseC: responseC, expectedNumRqstrs: expectedRqstsFromRqstr, mux: &sync.Mutex{}}
 	eps := []api.Endpoint{
 		{
-			URL:         "ddd",
+			URL:         "doesn'tMatter",
 			RqstPercent: 100,
 		},
 	}

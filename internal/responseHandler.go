@@ -6,9 +6,9 @@ package internal
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -89,113 +89,125 @@ type ResponseHandler struct {
 	DoneC     chan struct{}
 }
 
-// Start begins the process of accepting responses. It expects to be run as a goroutine
+// Start begins the process of accepting responses. It expects to be run as a goroutine.
 func (rh ResponseHandler) Start() {
 	log.Debug().Msg("ResponseHandler starting")
 	epRunSummary := make(map[string]*EndpointSummary)
 	runSummary := RunSummary{maxRqstDuration: -1, minRqstDuration: time.Duration(math.MaxInt64)}
 	runSummary.EndpointOverviewSummary = make(map[string]map[string]int)
 
-	var totalDurationSummary time.Duration
-	var once sync.Once
-	var start time.Time
-
-	finishFunc := func() {
-		runTime := time.Since(start)
-		runSummary.RunDuration = runTime.String()
-		runSummary.TotalRequestDuration = totalDurationSummary.String()
-		runSummary.MaxRqstDuration = runSummary.maxRqstDuration.String()
-		runSummary.MinRqstDuration = runSummary.minRqstDuration.String()
-		avgRqstDuration := time.Duration(0)
-		if runSummary.TotalRqsts > 0 {
-			avgRqstDuration = totalDurationSummary / time.Duration(runSummary.TotalRqsts)
-		}
-		runSummary.AvgRqstDuration = avgRqstDuration.String()
-
-		// run times shorter than 1 second will result in a 'RqstRatePerSec' being zero due to rounding
-		runDurInMillis := runTime / time.Millisecond
-		if runDurInMillis > 0 {
-			runSummary.RqstRatePerSec = (float64(runSummary.TotalRqsts) / float64(runTime)) * float64(time.Second)
-		}
-		log.Debug().Msgf("NumRqsts: %d, RunDur in millis: %d, Rqsts/millis: %f, TotalRqsts/RunDur: %f", runSummary.TotalRqsts, int64(runDurInMillis), runSummary.RqstRatePerSec, float64(runSummary.TotalRqsts)/float64(runDurInMillis))
-		runSummary.EndpointRunSummary = epRunSummary
-
-		for _, epSumm := range epRunSummary {
-			epSumm.MaxRqstDuration = epSumm.maxRqstDuration.String()
-			epSumm.MinRqstDuration = epSumm.minRqstDuration.String()
-			epSumm.AvgRqstDuration = "0s"
-			if epSumm.TotalRqsts > 0 {
-				epSumm.AvgRqstDuration = (epSumm.totalRequestDuration / time.Duration(epSumm.TotalRqsts)).String()
-			}
-			epSumm.TotalRequestDuration = epSumm.totalRequestDuration.String()
-			log.Debug().Msgf("EndpointSummary: %+v", epSumm)
-		}
-
-		rsjson, err := json.Marshal(runSummary)
-		if err != nil {
-			log.Error().Err(err).Msgf("error marshaling RunSummary into string: %+v.\n", runSummary)
-			return
-		}
-
-		fmt.Printf("%s\n", string(rsjson))
-		close(rh.DoneC)
-	}
+	start := time.Now()
+	var totalRunTime time.Duration
 
 	for {
 		select {
 		case resp, ok := <-rh.ResponseC:
-			once.Do(func() { start = time.Now() })
 			if !ok {
-				log.Info().Msg("ResponseHandler: Summarizing results and exiting")
-				finishFunc()
+				log.Debug().Msg("ResponseHandler: Summarizing results and exiting")
+				err := rh.finalizeResponseStats(start, &totalRunTime, &runSummary, epRunSummary)
+				if err != nil {
+					log.Error().Err(err)
+					close(rh.DoneC)
+					return
+				}
+				rsjson, err := json.Marshal(runSummary)
+				if err != nil {
+					log.Error().Err(err).Msgf("error marshaling RunSummary into string: %+v.\n", runSummary)
+					close(rh.DoneC)
+					return
+				}
+
+				fmt.Printf("%s\n", string(rsjson))
+				close(rh.DoneC)
 				return
 			}
 
-			runSummary.TotalRqsts++
-			totalDurationSummary = totalDurationSummary + resp.RequestDuration
-			if resp.RequestDuration > runSummary.maxRqstDuration {
-				runSummary.maxRqstDuration = resp.RequestDuration
-			}
-			if resp.RequestDuration < runSummary.minRqstDuration {
-				runSummary.minRqstDuration = resp.RequestDuration
-			}
+			accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
 
-			var eqRqstCount map[string]int
-			eqRqstCount, found := runSummary.EndpointOverviewSummary[resp.Endpoint.URL]
-			if !found {
-				runSummary.EndpointOverviewSummary[resp.Endpoint.URL] = make(map[string]int)
-				eqRqstCount = runSummary.EndpointOverviewSummary[resp.Endpoint.URL]
-			}
-			eqRqstCount[resp.Endpoint.Method]++
-
-			var epSumm *EndpointSummary
-			epSumm, found = epRunSummary[resp.Endpoint.URL]
-			if !found {
-				epSumm = &EndpointSummary{
-					URL:             resp.Endpoint.URL,
-					Method:          resp.Endpoint.Method,
-					HTTPStatusDist:  make(map[int]int),
-					maxRqstDuration: -1,
-					minRqstDuration: time.Duration(math.MaxInt64),
-				}
-				epRunSummary[resp.Endpoint.URL] = epSumm
-			}
-
-			epSumm.TotalRqsts++
-			epSumm.totalRequestDuration = epSumm.totalRequestDuration + resp.RequestDuration
-
-			if resp.RequestDuration > epSumm.maxRqstDuration {
-				epSumm.maxRqstDuration = resp.RequestDuration
-			}
-			if resp.RequestDuration < epSumm.minRqstDuration {
-				epSumm.minRqstDuration = resp.RequestDuration
-			}
-
-			_, ok = epSumm.HTTPStatusDist[resp.HTTPStatus]
-			if !ok {
-				epSumm.HTTPStatusDist[resp.HTTPStatus] = 0
-			}
-			epSumm.HTTPStatusDist[resp.HTTPStatus]++
 		}
 	}
+}
+
+func (rh ResponseHandler) finalizeResponseStats(start time.Time, totalRunTime *time.Duration, runSummary *RunSummary, epRunSummary map[string]*EndpointSummary) error {
+	runTime := time.Since(start)
+	runSummary.RunDuration = runTime.String()
+	runSummary.TotalRequestDuration = totalRunTime.String()
+	runSummary.MaxRqstDuration = runSummary.maxRqstDuration.String()
+	runSummary.MinRqstDuration = runSummary.minRqstDuration.String()
+	avgRqstDuration := time.Duration(0)
+	if runSummary.TotalRqsts > 0 {
+		avgRqstDuration = *totalRunTime / time.Duration(runSummary.TotalRqsts)
+	}
+	runSummary.AvgRqstDuration = avgRqstDuration.String()
+
+	// run times shorter than 1 millisecond will result in a 'RqstRatePerSec' being zero due to rounding
+	runDurInMillis := runTime / time.Millisecond
+	if runDurInMillis < 1 {
+		return errors.New("Run duration in milliseconds was less than 1")
+	}
+	runSummary.RqstRatePerSec = (float64(runSummary.TotalRqsts) / float64(runTime)) * float64(time.Second)
+	log.Debug().Msgf("NumRqsts: %d, RunDur in millis: %d, Rqsts/millis: %f, TotalRqsts/RunDur: %f", runSummary.TotalRqsts,
+		int64(runDurInMillis), runSummary.RqstRatePerSec, float64(runSummary.TotalRqsts)/float64(runDurInMillis))
+	runSummary.EndpointRunSummary = epRunSummary
+
+	for _, epSumm := range epRunSummary {
+		epSumm.MaxRqstDuration = epSumm.maxRqstDuration.String()
+		epSumm.MinRqstDuration = epSumm.minRqstDuration.String()
+		epSumm.AvgRqstDuration = "0s"
+		if epSumm.TotalRqsts > 0 {
+			epSumm.AvgRqstDuration = (epSumm.totalRequestDuration / time.Duration(epSumm.TotalRqsts)).String()
+		}
+		epSumm.TotalRequestDuration = epSumm.totalRequestDuration.String()
+		log.Debug().Msgf("EndpointSummary: %+v", epSumm)
+	}
+
+	return nil
+}
+
+func accumulateResponseStats(resp Response, totalRunTime *time.Duration, runSummary *RunSummary, epRunSummary map[string]*EndpointSummary) {
+	runSummary.TotalRqsts++
+	*totalRunTime = *totalRunTime + resp.RequestDuration
+	if resp.RequestDuration > runSummary.maxRqstDuration {
+		runSummary.maxRqstDuration = resp.RequestDuration
+	}
+	if resp.RequestDuration < runSummary.minRqstDuration {
+		runSummary.minRqstDuration = resp.RequestDuration
+	}
+
+	var eqRqstCount map[string]int
+	eqRqstCount, found := runSummary.EndpointOverviewSummary[resp.Endpoint.URL]
+	if !found {
+		runSummary.EndpointOverviewSummary[resp.Endpoint.URL] = make(map[string]int)
+		eqRqstCount = runSummary.EndpointOverviewSummary[resp.Endpoint.URL]
+	}
+	eqRqstCount[resp.Endpoint.Method]++
+
+	var epSumm *EndpointSummary
+	epSumm, found = epRunSummary[resp.Endpoint.URL]
+	if !found {
+		epSumm = &EndpointSummary{
+			URL:             resp.Endpoint.URL,
+			Method:          resp.Endpoint.Method,
+			HTTPStatusDist:  make(map[int]int),
+			maxRqstDuration: -1,
+			minRqstDuration: time.Duration(math.MaxInt64),
+		}
+		epRunSummary[resp.Endpoint.URL] = epSumm
+	}
+
+	epSumm.TotalRqsts++
+	epSumm.totalRequestDuration = epSumm.totalRequestDuration + resp.RequestDuration
+
+	if resp.RequestDuration > epSumm.maxRqstDuration {
+		epSumm.maxRqstDuration = resp.RequestDuration
+	}
+	if resp.RequestDuration < epSumm.minRqstDuration {
+		epSumm.minRqstDuration = resp.RequestDuration
+	}
+
+	_, ok := epSumm.HTTPStatusDist[resp.HTTPStatus]
+	if !ok {
+		epSumm.HTTPStatusDist[resp.HTTPStatus] = 0
+	}
+	epSumm.HTTPStatusDist[resp.HTTPStatus]++
 }
