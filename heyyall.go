@@ -26,6 +26,7 @@ import (
 func main() {
 	configFile := flag.String("config", "config.json", "path and filename containing the runtime configuration")
 	logLevel := flag.Int("loglevel", int(zerolog.WarnLevel), "log level, 0 for debug, 1 info, 2 warn, ...")
+	reportDetailFlag := flag.String("detail", "long", "what level of report detail is desired, 'short' or 'long'")
 	flag.Parse()
 
 	zerolog.SetGlobalLevel(zerolog.Level(*logLevel))
@@ -45,9 +46,14 @@ func main() {
 	responseC := make(chan internal.Response, config.MaxConcurrentRqsts)
 	doneC := make(chan struct{})
 
+	var reportDetail internal.ReportDetail = internal.Long
+	if *reportDetailFlag == "short" {
+		reportDetail = internal.Short
+	}
 	responseHandler := internal.ResponseHandler{
-		ResponseC: responseC,
-		DoneC:     doneC,
+		ReportDetail: reportDetail,
+		ResponseC:    responseC,
+		DoneC:        doneC,
 	}
 	go responseHandler.Start()
 	// Give responseHandler a bit of time to start

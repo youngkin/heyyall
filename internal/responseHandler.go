@@ -36,9 +36,9 @@ type RqstStats struct {
 	AvgRqstDurationStr string
 }
 
-// EndpointSummary is used to report an overview of the results of
+// EndpointDetail is used to report an overview of the results of
 // a load test run for a given endpoint.
-type EndpointSummary struct {
+type EndpointDetail struct {
 	// URL is the endpoint URL
 	URL string
 	// HTTPMethodStatusDist summarizes, by HTTP method, the number of times a
@@ -75,28 +75,29 @@ type RunSummary struct {
 	//MinRqstRatePerSec int
 	// RqstStats is a summary of runtime statistics
 	RqstStats RqstStats
-	// EndpointOverviewSummary describes how often each endpoint was called.
+	// EndpointSummary describes how often each endpoint was called.
 	// It is a map keyed by URL of a map keyed by HTTP verb with a value of
 	// number of requests. So it's a summary of how often each HTTP verb
 	// was called on each endpoint.
-	EndpointOverviewSummary map[string]map[string]int
-	// EndpointRunSummary is the per endpoint summary of results keyed by URL
-	EndpointRunSummary map[string]*EndpointSummary
+	EndpointSummary map[string]map[string]int
+	// EndpointDetails is the per endpoint summary of results keyed by URL
+	EndpointDetails map[string]*EndpointDetail
 }
 
 // ResponseHandler is responsible for accepting, summarizing, and reporting
 // on the overall load test results.
 type ResponseHandler struct {
-	ResponseC chan Response
-	DoneC     chan struct{}
+	ReportDetail ReportDetail
+	ResponseC    chan Response
+	DoneC        chan struct{}
 }
 
 // Start begins the process of accepting responses. It expects to be run as a goroutine.
 func (rh ResponseHandler) Start() {
 	log.Debug().Msg("ResponseHandler starting")
-	epRunSummary := make(map[string]*EndpointSummary)
+	epRunSummary := make(map[string]*EndpointDetail)
 	runSummary := RunSummary{RqstStats: RqstStats{MaxRqstDuration: time.Duration(-1), MinRqstDuration: time.Duration(math.MaxInt64)}}
-	runSummary.EndpointOverviewSummary = make(map[string]map[string]int)
+	runSummary.EndpointSummary = make(map[string]map[string]int)
 
 	start := time.Now()
 	var totalRunTime time.Duration
@@ -131,7 +132,7 @@ func (rh ResponseHandler) Start() {
 }
 
 func (rh ResponseHandler) finalizeResponseStats(start time.Time, totalRunTime *time.Duration,
-	runSummary *RunSummary, epRunSummary map[string]*EndpointSummary) error {
+	runSummary *RunSummary, epRunSummary map[string]*EndpointDetail) error {
 
 	runSummary.RunDuration = time.Since(start)
 	runSummary.RunDurationStr = runSummary.RunDuration.String()
@@ -145,24 +146,27 @@ func (rh ResponseHandler) finalizeResponseStats(start time.Time, totalRunTime *t
 	runSummary.RqstStats.AvgRqstDurationStr = runSummary.RqstStats.AvgRqstDuration.String()
 
 	runSummary.RqstRatePerSec = (float64(runSummary.RqstStats.TotalRqsts) / float64(runSummary.RunDuration)) * float64(time.Second)
-	runSummary.EndpointRunSummary = epRunSummary
 
-	for _, epSumm := range epRunSummary {
-		epSumm.RqstStats.MaxRqstDurationStr = epSumm.RqstStats.MaxRqstDuration.String()
-		epSumm.RqstStats.MinRqstDurationStr = epSumm.RqstStats.MinRqstDuration.String()
-		epSumm.RqstStats.AvgRqstDurationStr = "0s"
-		if epSumm.RqstStats.TotalRqsts > 0 {
-			epSumm.RqstStats.AvgRqstDuration = (epSumm.RqstStats.TotalRequestDuration / time.Duration(epSumm.RqstStats.TotalRqsts))
-			epSumm.RqstStats.AvgRqstDurationStr = epSumm.RqstStats.AvgRqstDuration.String()
+	if rh.ReportDetail == Long {
+		runSummary.EndpointDetails = epRunSummary
+
+		for _, epSumm := range epRunSummary {
+			epSumm.RqstStats.MaxRqstDurationStr = epSumm.RqstStats.MaxRqstDuration.String()
+			epSumm.RqstStats.MinRqstDurationStr = epSumm.RqstStats.MinRqstDuration.String()
+			epSumm.RqstStats.AvgRqstDurationStr = "0s"
+			if epSumm.RqstStats.TotalRqsts > 0 {
+				epSumm.RqstStats.AvgRqstDuration = (epSumm.RqstStats.TotalRequestDuration / time.Duration(epSumm.RqstStats.TotalRqsts))
+				epSumm.RqstStats.AvgRqstDurationStr = epSumm.RqstStats.AvgRqstDuration.String()
+			}
+			epSumm.RqstStats.TotalRequestDurationStr = epSumm.RqstStats.TotalRequestDuration.String()
+			log.Debug().Msgf("EndpointSummary: %+v", epSumm)
 		}
-		epSumm.RqstStats.TotalRequestDurationStr = epSumm.RqstStats.TotalRequestDuration.String()
-		log.Debug().Msgf("EndpointSummary: %+v", epSumm)
 	}
 
 	return nil
 }
 
-func accumulateResponseStats(resp Response, totalRunTime *time.Duration, runSummary *RunSummary, epRunSummary map[string]*EndpointSummary) {
+func accumulateResponseStats(resp Response, totalRunTime *time.Duration, runSummary *RunSummary, epRunSummary map[string]*EndpointDetail) {
 	runSummary.RqstStats.TotalRqsts++
 	runSummary.RqstStats.TotalRequestDuration += resp.RequestDuration
 	*totalRunTime = *totalRunTime + resp.RequestDuration
@@ -174,17 +178,17 @@ func accumulateResponseStats(resp Response, totalRunTime *time.Duration, runSumm
 	}
 
 	var epStatusCount map[string]int
-	epStatusCount, found := runSummary.EndpointOverviewSummary[resp.Endpoint.URL]
+	epStatusCount, found := runSummary.EndpointSummary[resp.Endpoint.URL]
 	if !found {
-		runSummary.EndpointOverviewSummary[resp.Endpoint.URL] = make(map[string]int)
-		epStatusCount = runSummary.EndpointOverviewSummary[resp.Endpoint.URL]
+		runSummary.EndpointSummary[resp.Endpoint.URL] = make(map[string]int)
+		epStatusCount = runSummary.EndpointSummary[resp.Endpoint.URL]
 	}
 	epStatusCount[resp.Endpoint.Method]++
 
-	var epSumm *EndpointSummary
+	var epSumm *EndpointDetail
 	epSumm, found = epRunSummary[resp.Endpoint.URL]
 	if !found {
-		epSumm = &EndpointSummary{
+		epSumm = &EndpointDetail{
 			URL:                  resp.Endpoint.URL,
 			HTTPMethodStatusDist: make(map[string]map[int]int),
 			RqstStats: RqstStats{

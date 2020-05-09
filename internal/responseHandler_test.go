@@ -94,9 +94,9 @@ func TestResponseStats(t *testing.T) {
 			MinRqstDuration: math.MaxInt64,
 			MaxRqstDuration: 0,
 		},
-		EndpointOverviewSummary: make(map[string]map[string]int),
+		EndpointSummary: make(map[string]map[string]int),
 	}
-	epRunSummary := make(map[string]*EndpointSummary)
+	epRunSummary := make(map[string]*EndpointDetail)
 
 	// URL1
 	resp := Response{
@@ -182,7 +182,7 @@ func TestResponseStats(t *testing.T) {
 	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
 
 	// FINALIZE
-	rh := ResponseHandler{}
+	rh := ResponseHandler{ReportDetail: Long}
 	err := rh.finalizeResponseStats(start, &totalRunTime, &runSummary, epRunSummary)
 	if err != nil {
 		t.Errorf("unexpected error finalizing response stats: %s", err)
@@ -205,45 +205,45 @@ func TestResponseStats(t *testing.T) {
 		t.Errorf("error unmarshaling GoldenFile %s into RunSummary, Error: %s\n", expected, err)
 	}
 
-	if len(expectedJSON.EndpointRunSummary) != len(runSummary.EndpointRunSummary) {
-		t.Errorf("expected %d endpoints, got %d", len(expectedJSON.EndpointRunSummary), len(runSummary.EndpointRunSummary))
+	if len(expectedJSON.EndpointDetails) != len(runSummary.EndpointDetails) {
+		t.Errorf("expected %d endpoints, got %d", len(expectedJSON.EndpointDetails), len(runSummary.EndpointDetails))
 	}
-	if len(expectedJSON.EndpointOverviewSummary) != len(runSummary.EndpointOverviewSummary) {
-		t.Errorf("expected %d endpoints, got %d", len(expectedJSON.EndpointOverviewSummary), len(runSummary.EndpointOverviewSummary))
+	if len(expectedJSON.EndpointSummary) != len(runSummary.EndpointSummary) {
+		t.Errorf("expected %d endpoints, got %d", len(expectedJSON.EndpointSummary), len(runSummary.EndpointSummary))
 	}
 
 	if expectedJSON.RqstStats != runSummary.RqstStats {
 		t.Errorf("expected %+v, got %+v", expectedJSON.RqstStats, runSummary.RqstStats)
 	}
-	if expectedJSON.EndpointOverviewSummary[url1][http.MethodPut] != runSummary.EndpointOverviewSummary[url1][http.MethodPut] {
-		t.Errorf("expected %d PUTs for %s, got %d", expectedJSON.EndpointOverviewSummary[url1][http.MethodPut], url1,
-			runSummary.EndpointOverviewSummary[url1][http.MethodPut])
+	if expectedJSON.EndpointSummary[url1][http.MethodPut] != runSummary.EndpointSummary[url1][http.MethodPut] {
+		t.Errorf("expected %d PUTs for %s, got %d", expectedJSON.EndpointSummary[url1][http.MethodPut], url1,
+			runSummary.EndpointSummary[url1][http.MethodPut])
 	}
-	if expectedJSON.EndpointOverviewSummary[url1][http.MethodGet] != runSummary.EndpointOverviewSummary[url1][http.MethodGet] {
-		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointOverviewSummary[url1][http.MethodGet], url1,
-			runSummary.EndpointOverviewSummary[url1][http.MethodPut])
-	}
-
-	if expectedJSON.EndpointOverviewSummary[url2][http.MethodPost] != runSummary.EndpointOverviewSummary[url2][http.MethodPost] {
-		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointOverviewSummary[url2][http.MethodPost], url2,
-			runSummary.EndpointOverviewSummary[url2][http.MethodPost])
+	if expectedJSON.EndpointSummary[url1][http.MethodGet] != runSummary.EndpointSummary[url1][http.MethodGet] {
+		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url1][http.MethodGet], url1,
+			runSummary.EndpointSummary[url1][http.MethodPut])
 	}
 
-	if expectedJSON.EndpointOverviewSummary[url3][http.MethodPost] != runSummary.EndpointOverviewSummary[url3][http.MethodPost] {
-		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointOverviewSummary[url3][http.MethodPost], url3,
-			runSummary.EndpointOverviewSummary[url3][http.MethodPost])
+	if expectedJSON.EndpointSummary[url2][http.MethodPost] != runSummary.EndpointSummary[url2][http.MethodPost] {
+		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url2][http.MethodPost], url2,
+			runSummary.EndpointSummary[url2][http.MethodPost])
 	}
-	if expectedJSON.EndpointOverviewSummary[url3][http.MethodPut] != runSummary.EndpointOverviewSummary[url3][http.MethodPut] {
-		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointOverviewSummary[url3][http.MethodPut], url3,
-			runSummary.EndpointOverviewSummary[url3][http.MethodPut])
+
+	if expectedJSON.EndpointSummary[url3][http.MethodPost] != runSummary.EndpointSummary[url3][http.MethodPost] {
+		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url3][http.MethodPost], url3,
+			runSummary.EndpointSummary[url3][http.MethodPost])
 	}
-	if expectedJSON.EndpointOverviewSummary[url3][http.MethodGet] != runSummary.EndpointOverviewSummary[url3][http.MethodGet] {
-		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointOverviewSummary[url3][http.MethodGet], url3,
-			runSummary.EndpointOverviewSummary[url3][http.MethodGet])
+	if expectedJSON.EndpointSummary[url3][http.MethodPut] != runSummary.EndpointSummary[url3][http.MethodPut] {
+		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url3][http.MethodPut], url3,
+			runSummary.EndpointSummary[url3][http.MethodPut])
 	}
-	if expectedJSON.EndpointOverviewSummary[url3][http.MethodDelete] != runSummary.EndpointOverviewSummary[url3][http.MethodDelete] {
-		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointOverviewSummary[url3][http.MethodDelete], url3,
-			runSummary.EndpointOverviewSummary[url3][http.MethodDelete])
+	if expectedJSON.EndpointSummary[url3][http.MethodGet] != runSummary.EndpointSummary[url3][http.MethodGet] {
+		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url3][http.MethodGet], url3,
+			runSummary.EndpointSummary[url3][http.MethodGet])
+	}
+	if expectedJSON.EndpointSummary[url3][http.MethodDelete] != runSummary.EndpointSummary[url3][http.MethodDelete] {
+		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url3][http.MethodDelete], url3,
+			runSummary.EndpointSummary[url3][http.MethodDelete])
 	}
 }
 
