@@ -24,10 +24,30 @@ import (
 )
 
 func main() {
-	configFile := flag.String("config", "config.json", "path and filename containing the runtime configuration")
+	usage := `
+Usage: heyyall -config <ConfigFileLocation> [options...]
+
+Options:
+  -loglevel Logging level. Default is 'WARN' (2). 0 is DEBUG, 1 INFO, up to 4 FATAL
+  -detail   Detail level of output report, 'short' or 'long'. Default is 'long'
+  -help     This usage message`
+
+	configFile := flag.String("config", "", "path and filename containing the runtime configuration")
 	logLevel := flag.Int("loglevel", int(zerolog.WarnLevel), "log level, 0 for debug, 1 info, 2 warn, ...")
 	reportDetailFlag := flag.String("detail", "long", "what level of report detail is desired, 'short' or 'long'")
+	help := flag.Bool("help", false, "help will emit detailed usage instructions and exit")
 	flag.Parse()
+
+	if *help {
+		fmt.Println(usage)
+		return
+	}
+
+	if *configFile == "" {
+		fmt.Println("Config file location not provided")
+		fmt.Println(usage)
+		os.Exit(1)
+	}
 
 	zerolog.SetGlobalLevel(zerolog.Level(*logLevel))
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.StampMilli})
