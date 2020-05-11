@@ -155,5 +155,15 @@ func validateConfig(concurrency int, rate int, runDur time.Duration, numRqsts in
 	if rqstPct != 100 {
 		return fmt.Errorf("endpoint.RqstPercents must add up to 100 not %d", rqstPct)
 	}
+
+	if numRqsts > api.MaxRqsts {
+		log.Warn().Msgf("This test run is configured for %d requests. The limit is %d. The run will terminate after %d requests.",
+			numRqsts, api.MaxRqsts, api.MaxRqsts)
+	}
+	if runDur > api.MaxRunDuration {
+		log.Warn().Msgf("This test run is configured for %d run duration. The limit is %d. The run will terminate after %d hours.",
+			runDur, api.MaxRunDuration/time.Hour, api.MaxRunDuration/time.Hour)
+	}
+
 	return nil
 }

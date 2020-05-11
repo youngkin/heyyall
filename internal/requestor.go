@@ -7,7 +7,6 @@ package internal
 import (
 	"bytes"
 	"context"
-	"math"
 	"net/http"
 	"time"
 
@@ -51,11 +50,13 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Durati
 	// test in the for-loop below
 	if numRqsts == 0 {
 		log.Debug().Msgf("ProcessRqst: EP: %s, numRqsts %d was 0", ep.URL, numRqsts)
-		numRqsts = math.MaxInt64
+		// TODO: Need to come back here and ensure that each EP goroutine can only
+		// run it's share of the api.MaxRqsts limit.
+		numRqsts = api.MaxRqsts
 	}
 	if runDur == time.Duration(0) {
 		log.Debug().Msgf("ProcessRqst: EP: %s, runDur %d was 0", ep.URL, runDur/time.Second)
-		runDur = time.Duration(math.MaxInt64)
+		runDur = api.MaxRunDuration
 	}
 
 	log.Debug().Msgf("Setting 'timesUp' duration to %d seconds", runDur/time.Second)

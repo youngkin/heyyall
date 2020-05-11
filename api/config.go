@@ -6,6 +6,20 @@
 // create a runtime configuration file.
 package api
 
+import "time"
+
+// MaxRqsts is a hard-coded upper limit on how many total requests can
+// be made in a single test run. This limit is enforced regardless of
+// whether heyyall is configured for the number of requests to run or
+// the total run duration.
+var MaxRqsts = 1000000
+
+// MaxRunDuration is a hard-coded upper limit on how long the test
+// will be allowed to run. This limit is enforced regardless of
+// whether heyyall is configured for the number of requests to run or
+// the total run duration.
+var MaxRunDuration = time.Duration(time.Hour * 3)
+
 // Endpoint contains the information needed to to send a request,
 // in the desired proportion to total requests, to a given
 // HTTP endpoint (e.g., someplace.com).

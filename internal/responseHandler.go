@@ -8,9 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/youngkin/heyyall/api"
 )
 
 // RqstStats contains a set of common runtime stats reported at both the
@@ -26,6 +29,11 @@ type RqstStats struct {
 	MaxRqstDuration time.Duration
 	// MaxRqstDurationStr is a string representation of MaxRqstDuration
 	MaxRqstDurationStr string
+	// NormalizedMaxRqstDuration is the longest request duration rejecting outlier
+	// durations more than 'x' times the MinRqstDuration
+	NormalizedMaxRqstDuration time.Duration
+	// NormalizedMaxRqstDurationStr is a string representation of NormalizedMaxRqstDuration
+	NormalizedMaxRqstDurationStr string
 	// MinRqstDuration is the smallest request duration for an endpoint
 	MinRqstDuration time.Duration
 	// MinRqstDurationStr is a string representation of MinRqstDuration
@@ -50,8 +58,21 @@ type EndpointDetail struct {
 	RqstStats RqstStats
 }
 
-// RunSummary is used to report an overview of the results of a
+// RunResults is used to report an overview of the results of a
 // load test run
+type RunResults struct {
+	// RunSummary is a roll-up of the detailed run results
+	RunSummary RunSummary
+	// EndpointSummary describes how often each endpoint was called.
+	// It is a map keyed by URL of a map keyed by HTTP verb with a value of
+	// number of requests. So it's a summary of how often each HTTP verb
+	// was called on each endpoint.
+	EndpointSummary map[string]map[string]int
+	// EndpointDetails is the per endpoint summary of results keyed by URL
+	EndpointDetails map[string]*EndpointDetail `json:",omitempty"`
+}
+
+// RunSummary is a roll-up of the detailed run results
 type RunSummary struct {
 	// RqstRatePerSec is the overall request rate per second
 	// rounded to the nearest integer
@@ -75,29 +96,29 @@ type RunSummary struct {
 	//MinRqstRatePerSec int
 	// RqstStats is a summary of runtime statistics
 	RqstStats RqstStats
-	// EndpointSummary describes how often each endpoint was called.
-	// It is a map keyed by URL of a map keyed by HTTP verb with a value of
-	// number of requests. So it's a summary of how often each HTTP verb
-	// was called on each endpoint.
-	EndpointSummary map[string]map[string]int
-	// EndpointDetails is the per endpoint summary of results keyed by URL
-	EndpointDetails map[string]*EndpointDetail
 }
 
 // ResponseHandler is responsible for accepting, summarizing, and reporting
 // on the overall load test results.
 type ResponseHandler struct {
-	ReportDetail ReportDetail
-	ResponseC    chan Response
-	DoneC        chan struct{}
+	ReportDetail  ReportDetail
+	ResponseC     chan Response
+	DoneC         chan struct{}
+	NumRqsts      int
+	NormFactor    int
+	timingResults []time.Duration
+	histogram     map[float64]int
 }
 
 // Start begins the process of accepting responses. It expects to be run as a goroutine.
-func (rh ResponseHandler) Start() {
+func (rh *ResponseHandler) Start() {
 	log.Debug().Msg("ResponseHandler starting")
+
+	rh.timingResults = make([]time.Duration, 0, int(math.Min(float64(rh.NumRqsts), float64(api.MaxRqsts))))
 	epRunSummary := make(map[string]*EndpointDetail)
 	runSummary := RunSummary{RqstStats: RqstStats{MaxRqstDuration: time.Duration(-1), MinRqstDuration: time.Duration(math.MaxInt64)}}
-	runSummary.EndpointSummary = make(map[string]map[string]int)
+	runResults := RunResults{RunSummary: runSummary}
+	runResults.EndpointSummary = make(map[string]map[string]int)
 
 	start := time.Now()
 	var totalRunTime time.Duration
@@ -106,49 +127,54 @@ func (rh ResponseHandler) Start() {
 		select {
 		case resp, ok := <-rh.ResponseC:
 			if !ok {
+				defer close(rh.DoneC)
 				log.Debug().Msg("ResponseHandler: Summarizing results and exiting")
-				err := rh.finalizeResponseStats(start, &totalRunTime, &runSummary, epRunSummary)
+				err := rh.finalizeResponseStats(start, &totalRunTime, &runResults, epRunSummary)
 				if err != nil {
 					log.Error().Err(err)
-					close(rh.DoneC)
-					return
-				}
-				rsjson, err := json.Marshal(runSummary)
-				if err != nil {
-					log.Error().Err(err).Msgf("error marshaling RunSummary into string: %+v.\n", runSummary)
-					close(rh.DoneC)
 					return
 				}
 
-				fmt.Printf("%s\n", string(rsjson))
-				close(rh.DoneC)
+				min, max := rh.generateHistogram(&runResults)
+
+				rsjson, err := json.MarshalIndent(runResults, "    ", "  ")
+				if err != nil {
+					log.Error().Err(err).Msgf("error marshaling RunSummary into string: %+v.\n", runResults)
+					return
+				}
+
+				fmt.Printf("\nResponse Time Histogram (seconds):\n")
+				fmt.Println(rh.generateHistogramString(min, max))
+
+				fmt.Printf("\n\nRun Results:\n")
+				fmt.Printf("%s\n", string(rsjson[2:len(rsjson)-1]))
 				return
 			}
 
-			accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+			rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
 
 		}
 	}
 }
 
-func (rh ResponseHandler) finalizeResponseStats(start time.Time, totalRunTime *time.Duration,
-	runSummary *RunSummary, epRunSummary map[string]*EndpointDetail) error {
+func (rh *ResponseHandler) finalizeResponseStats(start time.Time, totalRunTime *time.Duration,
+	runResults *RunResults, epRunSummary map[string]*EndpointDetail) error {
 
-	runSummary.RunDuration = time.Since(start)
-	runSummary.RunDurationStr = runSummary.RunDuration.String()
-	runSummary.RqstStats.TotalRequestDurationStr = totalRunTime.String()
-	runSummary.RqstStats.MaxRqstDurationStr = runSummary.RqstStats.MaxRqstDuration.String()
-	runSummary.RqstStats.MinRqstDurationStr = runSummary.RqstStats.MinRqstDuration.String()
-	runSummary.RqstStats.AvgRqstDuration = time.Duration(0)
-	if runSummary.RqstStats.TotalRqsts > 0 {
-		runSummary.RqstStats.AvgRqstDuration = *totalRunTime / time.Duration(runSummary.RqstStats.TotalRqsts)
+	runResults.RunSummary.RunDuration = time.Since(start)
+	runResults.RunSummary.RunDurationStr = runResults.RunSummary.RunDuration.String()
+	runResults.RunSummary.RqstStats.TotalRequestDurationStr = totalRunTime.String()
+	runResults.RunSummary.RqstStats.MaxRqstDurationStr = runResults.RunSummary.RqstStats.MaxRqstDuration.String()
+	runResults.RunSummary.RqstStats.MinRqstDurationStr = runResults.RunSummary.RqstStats.MinRqstDuration.String()
+	runResults.RunSummary.RqstStats.AvgRqstDuration = time.Duration(0)
+	if runResults.RunSummary.RqstStats.TotalRqsts > 0 {
+		runResults.RunSummary.RqstStats.AvgRqstDuration = *totalRunTime / time.Duration(runResults.RunSummary.RqstStats.TotalRqsts)
 	}
-	runSummary.RqstStats.AvgRqstDurationStr = runSummary.RqstStats.AvgRqstDuration.String()
+	runResults.RunSummary.RqstStats.AvgRqstDurationStr = runResults.RunSummary.RqstStats.AvgRqstDuration.String()
 
-	runSummary.RqstRatePerSec = (float64(runSummary.RqstStats.TotalRqsts) / float64(runSummary.RunDuration)) * float64(time.Second)
+	runResults.RunSummary.RqstRatePerSec = (float64(runResults.RunSummary.RqstStats.TotalRqsts) / float64(runResults.RunSummary.RunDuration)) * float64(time.Second)
 
 	if rh.ReportDetail == Long {
-		runSummary.EndpointDetails = epRunSummary
+		runResults.EndpointDetails = epRunSummary
 
 		for _, epSumm := range epRunSummary {
 			epSumm.RqstStats.MaxRqstDurationStr = epSumm.RqstStats.MaxRqstDuration.String()
@@ -166,22 +192,24 @@ func (rh ResponseHandler) finalizeResponseStats(start time.Time, totalRunTime *t
 	return nil
 }
 
-func accumulateResponseStats(resp Response, totalRunTime *time.Duration, runSummary *RunSummary, epRunSummary map[string]*EndpointDetail) {
-	runSummary.RqstStats.TotalRqsts++
-	runSummary.RqstStats.TotalRequestDuration += resp.RequestDuration
+func (rh *ResponseHandler) accumulateResponseStats(resp Response, totalRunTime *time.Duration, runResults *RunResults, epRunSummary map[string]*EndpointDetail) {
+	rh.timingResults = append(rh.timingResults, resp.RequestDuration)
+	runResults.RunSummary.RqstStats.TotalRqsts++
+	runResults.RunSummary.RqstStats.TotalRequestDuration += resp.RequestDuration
 	*totalRunTime = *totalRunTime + resp.RequestDuration
-	if resp.RequestDuration > runSummary.RqstStats.MaxRqstDuration {
-		runSummary.RqstStats.MaxRqstDuration = resp.RequestDuration
+
+	if resp.RequestDuration > runResults.RunSummary.RqstStats.MaxRqstDuration {
+		runResults.RunSummary.RqstStats.MaxRqstDuration = resp.RequestDuration
 	}
-	if resp.RequestDuration < runSummary.RqstStats.MinRqstDuration {
-		runSummary.RqstStats.MinRqstDuration = resp.RequestDuration
+	if resp.RequestDuration < runResults.RunSummary.RqstStats.MinRqstDuration {
+		runResults.RunSummary.RqstStats.MinRqstDuration = resp.RequestDuration
 	}
 
 	var epStatusCount map[string]int
-	epStatusCount, found := runSummary.EndpointSummary[resp.Endpoint.URL]
+	epStatusCount, found := runResults.EndpointSummary[resp.Endpoint.URL]
 	if !found {
-		runSummary.EndpointSummary[resp.Endpoint.URL] = make(map[string]int)
-		epStatusCount = runSummary.EndpointSummary[resp.Endpoint.URL]
+		runResults.EndpointSummary[resp.Endpoint.URL] = make(map[string]int)
+		epStatusCount = runResults.EndpointSummary[resp.Endpoint.URL]
 	}
 	epStatusCount[resp.Endpoint.Method]++
 
@@ -216,4 +244,122 @@ func accumulateResponseStats(resp Response, totalRunTime *time.Duration, runSumm
 	}
 	epSumm.HTTPMethodStatusDist[resp.Endpoint.Method][resp.HTTPStatus]++
 
+}
+
+// generateHistogram populates the histogram map, a map keyed by a float64 that's
+// taken from the result set, referencing the number of observations in the 'range'
+// of that number. It returns the min and max values for the histogram, i.e., the
+// min and max number of observations in the histogram.
+func (rh *ResponseHandler) generateHistogram(runResults *RunResults) (int, int) {
+	numBins := calcNumBinsSturgesMethod(len(rh.timingResults))
+	// numBins := calcNumBinsRiceMethod(len(rh.timingResults))
+	runResults.RunSummary.RqstStats.NormalizedMaxRqstDuration = time.Duration(rh.NormFactor) * runResults.RunSummary.RqstStats.MinRqstDuration
+	runResults.RunSummary.RqstStats.NormalizedMaxRqstDurationStr = runResults.RunSummary.RqstStats.NormalizedMaxRqstDuration.String()
+	timeRange := runResults.RunSummary.RqstStats.MaxRqstDuration - runResults.RunSummary.RqstStats.MinRqstDuration
+	if rh.NormFactor > 1 {
+		timeRange = runResults.RunSummary.RqstStats.NormalizedMaxRqstDuration - runResults.RunSummary.RqstStats.MinRqstDuration
+	}
+	binWidth := float64(timeRange) / float64(numBins)
+
+	rh.histogram = make(map[float64]int)
+	bins := make([]float64, 0, numBins)
+
+	for i := 1; i <= numBins; i++ {
+		rh.histogram[float64(i)*binWidth] = 0
+		bins = append(bins, float64(i)*binWidth)
+	}
+
+	maxBinVal, minBinVal := 0, math.MaxInt64
+	for _, obser := range rh.timingResults {
+		// TODO: Might be able to get this to O(n*Log(n))) if did a binary search on bins as it's sorted
+		for _, bin := range bins {
+			if float64(obser) < bin {
+				rh.histogram[bin]++
+				if rh.histogram[bin] > maxBinVal {
+					maxBinVal = rh.histogram[bin]
+				}
+				if rh.histogram[bin] < minBinVal {
+					minBinVal = rh.histogram[bin]
+				}
+				break
+			}
+		}
+	}
+
+	if rh.NormFactor > 1 {
+		// If the histogram is being normalized, pick up all the observations greater than largest bin's key
+		// into a single bin. This will at least show how many observations occurred between 'largestBinKey'
+		// and the MaxRqstDuration.
+		largestBinKey := binWidth * float64(numBins)
+		var tailBin int
+		for _, obser := range rh.timingResults {
+			if float64(obser) >= largestBinKey {
+				tailBin++
+			}
+		}
+		rh.histogram[float64(runResults.RunSummary.RqstStats.MaxRqstDuration)] = tailBin
+		maxBinVal = int(math.Max(float64(tailBin), float64(maxBinVal)))
+	}
+
+	return minBinVal, maxBinVal
+}
+
+func (rh *ResponseHandler) printHistogram(min, max int) {
+	barUnit := ">"
+	// barUnit := "■"
+
+	keys := make([]float64, 0, len(rh.histogram))
+	for k := range rh.histogram {
+		keys = append(keys, k)
+	}
+	sort.Float64s(keys)
+
+	fmt.Printf("\tLatency\t\tNumber of Observations\n")
+	fmt.Printf("\t-------\t\t----------------------\n")
+	var sb strings.Builder
+	for _, key := range keys {
+		cnt := rh.histogram[key]
+		barLen := ((cnt * 100) + (max / 2)) / max
+		for i := 0; i < barLen; i++ {
+			sb.WriteString(barUnit)
+		}
+		fmt.Printf("\t[%6.3f]\t%7v\t%s\n", key/float64(time.Second), cnt, sb.String())
+		sb.Reset()
+	}
+}
+
+func (rh *ResponseHandler) generateHistogramString(min, max int) string {
+	barUnit := ">"
+	// barUnit := "■"
+
+	keys := make([]float64, 0, len(rh.histogram))
+	for k := range rh.histogram {
+		keys = append(keys, k)
+	}
+	sort.Float64s(keys)
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("\tLatency\t\tNumber of Observations\n"))
+	sb.WriteString(fmt.Sprintf("\t-------\t\t----------------------\n"))
+	for _, key := range keys {
+		var sbBar strings.Builder
+		cnt := rh.histogram[key]
+		barLen := ((cnt * 100) + (max / 2)) / max
+		for i := 0; i < barLen; i++ {
+			sbBar.WriteString(barUnit)
+		}
+		sb.WriteString(fmt.Sprintf("\t[%6.3f]\t%7v\t%s\n", key/float64(time.Second), cnt, sbBar.String()))
+		sbBar.Reset()
+	}
+	return sb.String()
+}
+
+func calcNumBinsSturgesMethod(numObservations int) int {
+	return int(math.Ceil(math.Log2(float64(numObservations) + 1)))
+}
+
+// Results in a lot more bins at higher numbers than Sturges. For example, at 1,000,000
+// observations Sturges generates 21 buckets to Rice's 200
+func calcNumBinsRiceMethod(numObservations int) int {
+	return int(math.Ceil(2 * math.Cbrt(float64(numObservations))))
 }

@@ -7,8 +7,10 @@ package internal
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -89,14 +91,18 @@ func TestResponseStats(t *testing.T) {
 	url1 := "http://someurl/1"
 	url2 := "http://someurl/2"
 	url3 := "http://someurl/3"
-	runSummary := RunSummary{
-		RqstStats: RqstStats{
-			MinRqstDuration: math.MaxInt64,
-			MaxRqstDuration: 0,
+	runResults := RunResults{
+		RunSummary: RunSummary{
+			RqstStats: RqstStats{
+				MinRqstDuration: math.MaxInt64,
+				MaxRqstDuration: 0,
+			},
 		},
 		EndpointSummary: make(map[string]map[string]int),
 	}
 	epRunSummary := make(map[string]*EndpointDetail)
+
+	rh := ResponseHandler{ReportDetail: Long}
 
 	// URL1
 	resp := Response{
@@ -105,20 +111,20 @@ func TestResponseStats(t *testing.T) {
 		RequestDuration: time.Millisecond * 100,
 	}
 	totalRunTime := time.Second * 0
-	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+	rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
 
 	resp = Response{
 		HTTPStatus:      http.StatusAccepted,
 		Endpoint:        api.Endpoint{URL: url1, Method: http.MethodPut},
 		RequestDuration: time.Millisecond * 1000,
 	}
-	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+	rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
 	resp = Response{
 		HTTPStatus:      http.StatusAccepted,
 		Endpoint:        api.Endpoint{URL: url1, Method: http.MethodPut},
 		RequestDuration: time.Millisecond * 500,
 	}
-	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+	rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
 
 	// URL2
 	resp = Response{
@@ -126,7 +132,7 @@ func TestResponseStats(t *testing.T) {
 		Endpoint:        api.Endpoint{URL: url2, Method: http.MethodPost},
 		RequestDuration: time.Millisecond * 250,
 	}
-	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+	rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
 
 	// URL3 - POST
 	resp = Response{
@@ -134,118 +140,146 @@ func TestResponseStats(t *testing.T) {
 		Endpoint:        api.Endpoint{URL: url3, Method: http.MethodPost},
 		RequestDuration: time.Millisecond * 250,
 	}
-	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+	rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
 	// GET
 	resp = Response{
 		HTTPStatus:      http.StatusOK,
 		Endpoint:        api.Endpoint{URL: url3, Method: http.MethodGet},
 		RequestDuration: time.Millisecond * 250,
 	}
-	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+	rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
 	resp = Response{
 		HTTPStatus:      http.StatusOK,
 		Endpoint:        api.Endpoint{URL: url3, Method: http.MethodGet},
 		RequestDuration: time.Millisecond * 750,
 	}
-	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+	rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
 	// PUT
 	resp = Response{
 		HTTPStatus:      http.StatusOK,
 		Endpoint:        api.Endpoint{URL: url3, Method: http.MethodPut},
 		RequestDuration: time.Millisecond * 250,
 	}
-	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+	rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
 	resp = Response{
 		HTTPStatus:      http.StatusOK,
 		Endpoint:        api.Endpoint{URL: url3, Method: http.MethodPut},
 		RequestDuration: time.Millisecond * 750,
 	}
-	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+	rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
 	resp = Response{
 		HTTPStatus:      http.StatusOK,
 		Endpoint:        api.Endpoint{URL: url3, Method: http.MethodPut},
 		RequestDuration: time.Millisecond * 1250,
 	}
-	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+	rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
 	resp = Response{
 		HTTPStatus:      http.StatusOK,
 		Endpoint:        api.Endpoint{URL: url3, Method: http.MethodPut},
 		RequestDuration: time.Millisecond * 1750,
 	}
-	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+	rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
 	// DELETE
 	resp = Response{
 		HTTPStatus:      http.StatusOK,
 		Endpoint:        api.Endpoint{URL: url3, Method: http.MethodDelete},
 		RequestDuration: time.Millisecond * 900,
 	}
-	accumulateResponseStats(resp, &totalRunTime, &runSummary, epRunSummary)
+	rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
+
+	// TODO: Add read from DONE channel to verify that ResponseHandler closes
+	// out all resources as expected
 
 	// FINALIZE
-	rh := ResponseHandler{ReportDetail: Long}
-	err := rh.finalizeResponseStats(start, &totalRunTime, &runSummary, epRunSummary)
+	err := rh.finalizeResponseStats(start, &totalRunTime, &runResults, epRunSummary)
 	if err != nil {
 		t.Errorf("unexpected error finalizing response stats: %s", err)
 	}
-	actual, err := json.Marshal(runSummary)
+	actual, err := json.Marshal(runResults)
 	if err != nil {
-		t.Errorf("error marshaling RunSummary into string: %+v. Error: %s\n", runSummary, err)
+		t.Errorf("error marshaling RunSummary into string: %+v. Error: %s\n", runResults, err)
 	}
 
-	// fmt.Printf("\n%s\n\n", string(actual))
+	fmt.Printf("\n%s\n\n", string(actual))
 
 	if *update {
 		updateGoldenFile(t, testName, string(actual))
 	}
 
 	expected := readGoldenFile(t, testName)
-	expectedJSON := RunSummary{}
+	expectedJSON := RunResults{}
 	err = json.Unmarshal(expected, &expectedJSON)
 	if err != nil {
 		t.Errorf("error unmarshaling GoldenFile %s into RunSummary, Error: %s\n", expected, err)
 	}
 
-	if len(expectedJSON.EndpointDetails) != len(runSummary.EndpointDetails) {
-		t.Errorf("expected %d endpoints, got %d", len(expectedJSON.EndpointDetails), len(runSummary.EndpointDetails))
+	if len(expectedJSON.EndpointDetails) != len(runResults.EndpointDetails) {
+		t.Errorf("expected %d endpoints, got %d", len(expectedJSON.EndpointDetails), len(runResults.EndpointDetails))
 	}
-	if len(expectedJSON.EndpointSummary) != len(runSummary.EndpointSummary) {
-		t.Errorf("expected %d endpoints, got %d", len(expectedJSON.EndpointSummary), len(runSummary.EndpointSummary))
+	if len(expectedJSON.EndpointSummary) != len(runResults.EndpointSummary) {
+		t.Errorf("expected %d endpoints, got %d", len(expectedJSON.EndpointSummary), len(runResults.EndpointSummary))
 	}
 
-	if expectedJSON.RqstStats != runSummary.RqstStats {
-		t.Errorf("expected %+v, got %+v", expectedJSON.RqstStats, runSummary.RqstStats)
+	if expectedJSON.RunSummary.RqstStats != runResults.RunSummary.RqstStats {
+		t.Errorf("expected %+v, got %+v", expectedJSON.RunSummary.RqstStats, runResults.RunSummary.RqstStats)
 	}
-	if expectedJSON.EndpointSummary[url1][http.MethodPut] != runSummary.EndpointSummary[url1][http.MethodPut] {
+	if expectedJSON.EndpointSummary[url1][http.MethodPut] != runResults.EndpointSummary[url1][http.MethodPut] {
 		t.Errorf("expected %d PUTs for %s, got %d", expectedJSON.EndpointSummary[url1][http.MethodPut], url1,
-			runSummary.EndpointSummary[url1][http.MethodPut])
+			runResults.EndpointSummary[url1][http.MethodPut])
 	}
-	if expectedJSON.EndpointSummary[url1][http.MethodGet] != runSummary.EndpointSummary[url1][http.MethodGet] {
+	if expectedJSON.EndpointSummary[url1][http.MethodGet] != runResults.EndpointSummary[url1][http.MethodGet] {
 		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url1][http.MethodGet], url1,
-			runSummary.EndpointSummary[url1][http.MethodPut])
+			runResults.EndpointSummary[url1][http.MethodPut])
 	}
 
-	if expectedJSON.EndpointSummary[url2][http.MethodPost] != runSummary.EndpointSummary[url2][http.MethodPost] {
+	if expectedJSON.EndpointSummary[url2][http.MethodPost] != runResults.EndpointSummary[url2][http.MethodPost] {
 		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url2][http.MethodPost], url2,
-			runSummary.EndpointSummary[url2][http.MethodPost])
+			runResults.EndpointSummary[url2][http.MethodPost])
 	}
 
-	if expectedJSON.EndpointSummary[url3][http.MethodPost] != runSummary.EndpointSummary[url3][http.MethodPost] {
+	if expectedJSON.EndpointSummary[url3][http.MethodPost] != runResults.EndpointSummary[url3][http.MethodPost] {
 		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url3][http.MethodPost], url3,
-			runSummary.EndpointSummary[url3][http.MethodPost])
+			runResults.EndpointSummary[url3][http.MethodPost])
 	}
-	if expectedJSON.EndpointSummary[url3][http.MethodPut] != runSummary.EndpointSummary[url3][http.MethodPut] {
+	if expectedJSON.EndpointSummary[url3][http.MethodPut] != runResults.EndpointSummary[url3][http.MethodPut] {
 		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url3][http.MethodPut], url3,
-			runSummary.EndpointSummary[url3][http.MethodPut])
+			runResults.EndpointSummary[url3][http.MethodPut])
 	}
-	if expectedJSON.EndpointSummary[url3][http.MethodGet] != runSummary.EndpointSummary[url3][http.MethodGet] {
+	if expectedJSON.EndpointSummary[url3][http.MethodGet] != runResults.EndpointSummary[url3][http.MethodGet] {
 		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url3][http.MethodGet], url3,
-			runSummary.EndpointSummary[url3][http.MethodGet])
+			runResults.EndpointSummary[url3][http.MethodGet])
 	}
-	if expectedJSON.EndpointSummary[url3][http.MethodDelete] != runSummary.EndpointSummary[url3][http.MethodDelete] {
+	if expectedJSON.EndpointSummary[url3][http.MethodDelete] != runResults.EndpointSummary[url3][http.MethodDelete] {
 		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url3][http.MethodDelete], url3,
-			runSummary.EndpointSummary[url3][http.MethodDelete])
+			runResults.EndpointSummary[url3][http.MethodDelete])
 	}
 }
+
+// func TestHistogram(t *testing.T) {
+// 	numEntries := 1000
+// 	rh := &ResponseHandler{
+// 		timingResults: make([]time.Duration, 0, numEntries),
+// 	}
+
+// 	for i := 0; i < numEntries; i++ {
+// 		x := generateNormalDistribution(0.5, 1)
+// 		rh.timingResults = append(rh.timingResults, time.Duration(x*float64(time.Nanosecond*200)))
+// 	}
+
+// 	// for i, v := range rh.timingResults {
+// 	// t.Logf("timingResults[%d] = %d", i, v)
+// 	// }
+
+// 	// TODO: Need to calculate this
+// 	rqstStats := RqstStats{MinRqstDuration: 0, MaxRqstDuration: 267}
+// 	runResults := RunResults{RunSummary: RunSummary{RqstStats: rqstStats}}
+
+// 	min, max := rh.generateHistogram(&runResults)
+// 	t.Logf("min: %d, max: %d, Number of histogram entries: %d", min, max, len(rh.histogram))
+
+// 	h := rh.generateHistogramString(min, max)
+// 	t.Logf("Generated histogram: \n%s", h)
+// }
 
 func updateGoldenFile(t *testing.T, testName string, contents string) {
 	gf := filepath.Join(goldenFileDir, testName+goldenFileSuffix)
@@ -262,4 +296,35 @@ func readGoldenFile(t *testing.T, testName string) []byte {
 		t.Fatalf("failed reading golden file: %s", err)
 	}
 	return gfc
+}
+
+func generateNormalDistribution(mean float64, stdDev int) float64 {
+	x := rand.NormFloat64()*float64(stdDev) + float64(mean)
+	if x < 0 {
+		x = x * -1
+	}
+	return x
+
+	// var v1, v2, s float64
+
+	// for {
+	// 	u1 := rand.Float64()
+	// 	u2 := rand.Float64()
+	// 	v1 = 2*u1 - 1
+	// 	v2 = 2*u2 - 1
+	// 	s = v1*v1 + v2*v2
+	// 	if s < 1 {
+	// 		break
+	// 	}
+	// }
+
+	// if s == 0 {
+	// 	return float64(0)
+	// }
+
+	// x := mean + (float64(stdDev) * (v1 * math.Sqrt(-2*math.Log(s)/s)))
+	// if x < 0 {
+	// 	x = x * -1
+	// }
+	// return x
 }
