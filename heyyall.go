@@ -25,27 +25,32 @@ import (
 
 func main() {
 	usage := `
-Usage: heyyall -config <ConfigFileLocation> [options...]
+Usage: heyyall -config <ConfigFileLocation> [flags...]
 
 Options:
   -loglevel Logging level. Default is 'WARN' (2). 0 is DEBUG, 1 INFO, up to 4 FATAL
   -detail   Detail level of output report, 'short' or 'long'. Default is 'long'
   -nf       Normalization factor used to compress the output histogram by eliminating long tails. 
-            Higher numbers provide a finer grained view of the data at the expense of dropping data
-			associated with the tail of the latency distribution. The latter is partly mitigated by 
-			including a final histogram bin containing the number of observations between it and
-			the previous latency bin. While this doesn't show a detailed distribution of the tail,
-			it does indicate how many observations are included in the tail.
-			Lower values provide more detail, but increase the number of observations included in the
-			tail bin. 10 is generally a good starting number but may vary depending on the actual latency
-			distribution and range.  
-            The default is 0 which signifies no normalization will be performed.
-  -help     This usage message`
+            Lower values provide a finer grained view of the data at the expense of dropping data
+            associated with the tail of the latency distribution. The latter is partly mitigated by 
+            including a final histogram bin containing the number of observations between it and
+            the previous latency bin. While this doesn't show a detailed distribution of the tail,
+            it does indicate how many observations are included in the tail. 10 is generally a good 
+            starting number but may vary depending on the actual latency distribution and range
+            of latency values. The default is 0 which signifies no normalization will be performed.
+            With very small latencies (microseconds) it's possible that smaller normalization values 
+            could cause the application to panic. Increasing the normalization factor will eliminate 
+            the issue.
+  -cpus     Specifies how many CPUs to use for the test run. The default is 0 which specifies that
+            all CPUs should be used.
+  -help     This usage message
+`
 
 	configFile := flag.String("config", "", "path and filename containing the runtime configuration")
 	logLevel := flag.Int("loglevel", int(zerolog.WarnLevel), "log level, 0 for debug, 1 info, 2 warn, ...")
 	reportDetailFlag := flag.String("detail", "long", "what level of report detail is desired, 'short' or 'long'")
 	normalizationFactor := flag.Int("nf", 0, "normalization factor used to compress the output histogram by eliminating long tails. If provided, the value must be at least 10. The default is 0 which signifies no normalization will be done")
+	cpus := flag.Int("cpus", 0, "number of CPUs to use for the test run. Default is 0 which specifies all CPUs are to be used.")
 	help := flag.Bool("help", false, "help will emit detailed usage instructions and exit")
 	flag.Parse()
 
@@ -73,8 +78,14 @@ Options:
 		log.Fatal().Err(err).Msg("error loading configuration")
 	}
 
-	// TODO: Make this configurable
+	availCPUs := runtime.NumCPU()
+	if *cpus > availCPUs {
+		log.Fatal().Msgf("-cpus specfied %d CPUs are to be used. Only %d are available", *cpus, availCPUs)
+	}
 	runtime.GOMAXPROCS(runtime.NumCPU())
+	if *cpus > 0 {
+		runtime.GOMAXPROCS(runtime.NumCPU())
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 

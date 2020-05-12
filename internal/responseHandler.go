@@ -260,6 +260,9 @@ func (rh *ResponseHandler) generateHistogram(runResults *RunResults) (int, int) 
 		timeRange = runResults.RunSummary.RqstStats.NormalizedMaxRqstDuration - runResults.RunSummary.RqstStats.MinRqstDuration
 	}
 	binWidth := float64(timeRange) / float64(numBins)
+	if binWidth == 0 {
+		binWidth = float64(runResults.RunSummary.RqstStats.MinRqstDuration + 1)
+	}
 
 	rh.histogram = make(map[float64]int)
 	bins := make([]float64, 0, numBins)
@@ -269,7 +272,7 @@ func (rh *ResponseHandler) generateHistogram(runResults *RunResults) (int, int) 
 		bins = append(bins, float64(i)*binWidth)
 	}
 
-	maxBinVal, minBinVal := 0, math.MaxInt64
+	maxBinVal, minBinVal := 0, math.MaxInt32
 	for _, obser := range rh.timingResults {
 		// TODO: Might be able to get this to O(n*Log(n))) if did a binary search on bins as it's sorted
 		for _, bin := range bins {

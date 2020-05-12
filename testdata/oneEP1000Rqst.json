@@ -3,14 +3,12 @@
     "MaxConcurrentRqsts": 50,
     "RunDuration": "0s",
     "NumRequests": 1000,
-    "OutputType": "JSON",
     "Endpoints": [
         {
             "URL": "http://accountd.kube/users/1",
             "Method": "GET",
             "RqstBody": "",
-            "RqstPercent": 100,
-            "NumRequests": 2
+            "RqstPercent": 100
         }
     ]
 

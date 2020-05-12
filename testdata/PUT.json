@@ -1,0 +1,15 @@
+{
+    "RqstRate": 1,
+    "MaxConcurrentRqsts": 1,
+    "RunDuration": "0s",
+    "NumRequests": 1,
+    "Endpoints": [
+        {
+            "URL": "http://accountd.kube/users/7",
+            "Method": "PUT",
+            "RqstBody": "{\"accountid\":1,\"id\":7,\"name\":\"BeachBoy Brian Wilson\",\"email\":\"goodvibrations@gmail.com\",\"role\":1,\"password\":\"helpmerhonda\"}",
+            "RqstPercent": 100
+        }
+    ]
+
+}

@@ -17,4 +17,9 @@
 .history
 heystack
 heyyall
+heyyall-windows-amd64.exe
+heyyall-windows-386.exe
+heyyall-darwin-amd64
+heyyall-linux-amd64
+heyyall-linux-arm
 internal/coverage.html
