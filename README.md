@@ -157,7 +157,7 @@ Changing the Normalization Factor allows you to decide where in the range of res
 
 Specifying `heyyall`'s runtime behavior is done via a configuration file as shown above. The configuration can be quite simple or quite complex depending on your needs. Configuration is specified via a JSON file. In general the JSON is specified as follows:
 
-``` JSON
+``` 
 {
     "RqstRate": <Integer, specifies the request rate per second>,
     "MaxConcurrentRqsts": <Integer, specifies how many requests can be run concurrently>,
