@@ -72,12 +72,12 @@ A more sophisticated configuration can target multiple endpoints and perform mul
 * If you have a Go development environment you can:
   * Clone the respository and build it yourself
   * Run `go install github.com/youngkin/heyyall`
-* Download a binary
-  * [Windows 386](https://drive.google.com/open?id=1Wp-2hXBDixR4mBBxjiDcGOA81kgEAMH4)
-  * [Windows AMD64](https://drive.google.com/open?id=1lVOQ6FuM2BYYYEMRisGM1t0CWOcRRIVQ)
-  * [Linux AMD64](https://drive.google.com/open?id=1kdJrjwgJhpLK6D1u904s_XdUPcfQaA0N)
-  * [Linux ARM](https://drive.google.com/open?id=1DIouRKCHaJLsPudyuMxG00F-NOgrMR6d)
-  * [Mac(Darwin) AMD64](https://drive.google.com/open?id=14QxEznpurlYKMkw5lM9S5OlkhRUcp7n5)
+* Download a binary from [heyyallbin](https://github.com/youngkin/heyyallbin). There are binaries for:
+  * Windows 386
+  * Windows AMD64
+  * Linux AMD64
+  * Linux ARM
+  * Mac(Darwin) AMD64
 * Homebrew support is planned for the future
   
 # Usage
@@ -225,7 +225,6 @@ Most of these behaviors are a result of design decisions and as such can be chan
 
 # Future plans
 
-1. Currently the application generates only summary level statistics per endpoint instead of breaking them out by operation such as GET or PUT. This will be changed.
-2. More metrics will be added to gain feature parity with `hey`. Mainly this means metrics for latency distribution (i.e., quantiles) and high level TCP/IP and HTTP related metrics like DNS lookup latencies and HTTP request write latencies.
+1. More metrics will be added to gain feature parity with `hey`. Mainly this means metrics for latency distribution (i.e., quantiles) and high level TCP/IP and HTTP related metrics like DNS lookup latencies and HTTP request write latencies.
 3. Support for other configuration and output format types may be added, for example YAML and output in CSV format could be added.
 4. Ability to specify the number of requests to be run at an endpoint level. If added this would be a strict specification in the sense that measures will be taken to ensure that the exact number of requests will be run and restrictions will be put in place to ensure related calculations don't have non-integer results.

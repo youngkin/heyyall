@@ -21,27 +21,27 @@ import (
 type RqstStats struct {
 	// TotalRqsts is the overall number of requests made during the run
 	TotalRqsts int64
-	// TotalRequestDuration is the sum of all request run durations
-	TotalRequestDuration time.Duration
 	// TotalRequestDurationStr is the string version of TotalRequestDuration
 	TotalRequestDurationStr string
-	// MaxRqstDuration is the longest request duration
-	MaxRqstDuration time.Duration
 	// MaxRqstDurationStr is a string representation of MaxRqstDuration
 	MaxRqstDurationStr string
+	// NormalizedMaxRqstDurationStr is a string representation of NormalizedMaxRqstDuration
+	NormalizedMaxRqstDurationStr string
+	// MinRqstDurationStr is a string representation of MinRqstDuration
+	MinRqstDurationStr string
+	// AvgRqstDurationStr is the average duration of a request in microseconds
+	AvgRqstDurationStr string
+	// TotalRequestDuration is the sum of all request run durations
+	TotalRequestDuration time.Duration
+	// MaxRqstDuration is the longest request duration
+	MaxRqstDuration time.Duration
 	// NormalizedMaxRqstDuration is the longest request duration rejecting outlier
 	// durations more than 'x' times the MinRqstDuration
 	NormalizedMaxRqstDuration time.Duration
-	// NormalizedMaxRqstDurationStr is a string representation of NormalizedMaxRqstDuration
-	NormalizedMaxRqstDurationStr string
 	// MinRqstDuration is the smallest request duration for an endpoint
 	MinRqstDuration time.Duration
-	// MinRqstDurationStr is a string representation of MinRqstDuration
-	MinRqstDurationStr string
 	// AvgRqstDuration is the average duration of a request for an endpoint
 	AvgRqstDuration time.Duration
-	// AvgRqstDurationStr is the average duration of a request in microseconds
-	AvgRqstDurationStr string
 }
 
 // EndpointDetail is used to report an overview of the results of
@@ -54,8 +54,9 @@ type EndpointDetail struct {
 	// it is a map keyed by HTTP method containing a map keyed by HTTP status
 	// referencing the number of times that status was returned.
 	HTTPMethodStatusDist map[string]map[int]int
-	// RqstStats is a summary of runtime statistics
-	RqstStats RqstStats
+	// HTTPMethodRqstStats provides summary request statistics by HTTP Method. It is
+	// map of RqstStats keyed by HTTP method.
+	HTTPMethodRqstStats map[string]*RqstStats
 }
 
 // RunResults is used to report an overview of the results of a
@@ -176,16 +177,18 @@ func (rh *ResponseHandler) finalizeResponseStats(start time.Time, totalRunTime *
 	if rh.ReportDetail == Long {
 		runResults.EndpointDetails = epRunSummary
 
-		for _, epSumm := range epRunSummary {
-			epSumm.RqstStats.MaxRqstDurationStr = epSumm.RqstStats.MaxRqstDuration.String()
-			epSumm.RqstStats.MinRqstDurationStr = epSumm.RqstStats.MinRqstDuration.String()
-			epSumm.RqstStats.AvgRqstDurationStr = "0s"
-			if epSumm.RqstStats.TotalRqsts > 0 {
-				epSumm.RqstStats.AvgRqstDuration = (epSumm.RqstStats.TotalRequestDuration / time.Duration(epSumm.RqstStats.TotalRqsts))
-				epSumm.RqstStats.AvgRqstDurationStr = epSumm.RqstStats.AvgRqstDuration.String()
+		for _, epDetail := range epRunSummary {
+			for _, methodRqstStats := range epDetail.HTTPMethodRqstStats {
+				methodRqstStats.MaxRqstDurationStr = methodRqstStats.MaxRqstDuration.String()
+				methodRqstStats.MinRqstDurationStr = methodRqstStats.MinRqstDuration.String()
+				methodRqstStats.AvgRqstDurationStr = "0s"
+				if methodRqstStats.TotalRqsts > 0 {
+					methodRqstStats.AvgRqstDuration = (methodRqstStats.TotalRequestDuration / time.Duration(methodRqstStats.TotalRqsts))
+					methodRqstStats.AvgRqstDurationStr = methodRqstStats.AvgRqstDuration.String()
+				}
+				methodRqstStats.TotalRequestDurationStr = methodRqstStats.TotalRequestDuration.String()
+				log.Debug().Msgf("EndpointSummary: %+v", epDetail)
 			}
-			epSumm.RqstStats.TotalRequestDurationStr = epSumm.RqstStats.TotalRequestDuration.String()
-			log.Debug().Msgf("EndpointSummary: %+v", epSumm)
 		}
 	}
 
@@ -206,43 +209,49 @@ func (rh *ResponseHandler) accumulateResponseStats(resp Response, totalRunTime *
 	}
 
 	var epStatusCount map[string]int
-	epStatusCount, found := runResults.EndpointSummary[resp.Endpoint.URL]
-	if !found {
+	epStatusCount, ok := runResults.EndpointSummary[resp.Endpoint.URL]
+	if !ok {
 		runResults.EndpointSummary[resp.Endpoint.URL] = make(map[string]int)
 		epStatusCount = runResults.EndpointSummary[resp.Endpoint.URL]
 	}
 	epStatusCount[resp.Endpoint.Method]++
 
-	var epSumm *EndpointDetail
-	epSumm, found = epRunSummary[resp.Endpoint.URL]
-	if !found {
-		epSumm = &EndpointDetail{
+	var epDetail *EndpointDetail
+	epDetail, ok = epRunSummary[resp.Endpoint.URL]
+	if !ok {
+		epDetail = &EndpointDetail{
 			URL:                  resp.Endpoint.URL,
 			HTTPMethodStatusDist: make(map[string]map[int]int),
-			RqstStats: RqstStats{
-				MaxRqstDuration: -1,
-				MinRqstDuration: time.Duration(math.MaxInt64),
-			},
+			HTTPMethodRqstStats:  make(map[string]*RqstStats),
 		}
-		epRunSummary[resp.Endpoint.URL] = epSumm
+		epRunSummary[resp.Endpoint.URL] = epDetail
 	}
 
-	epSumm.RqstStats.TotalRqsts++
-	epSumm.RqstStats.TotalRequestDuration = epSumm.RqstStats.TotalRequestDuration + resp.RequestDuration
-
-	if resp.RequestDuration > epSumm.RqstStats.MaxRqstDuration {
-		epSumm.RqstStats.MaxRqstDuration = resp.RequestDuration
-	}
-	if resp.RequestDuration < epSumm.RqstStats.MinRqstDuration {
-		epSumm.RqstStats.MinRqstDuration = resp.RequestDuration
-	}
-
-	_, ok := epSumm.HTTPMethodStatusDist[resp.Endpoint.Method]
+	methodRqstStats, ok := epDetail.HTTPMethodRqstStats[resp.Endpoint.Method]
 	if !ok {
-		epSumm.HTTPMethodStatusDist[resp.Endpoint.Method] = make(map[int]int)
-		epSumm.HTTPMethodStatusDist[resp.Endpoint.Method][resp.HTTPStatus] = 0 // This is correct. It'll be incremented below
+		epDetail.HTTPMethodRqstStats[resp.Endpoint.Method] = &RqstStats{
+			MaxRqstDuration: -1,
+			MinRqstDuration: time.Duration(math.MaxInt64),
+		}
+		methodRqstStats = epDetail.HTTPMethodRqstStats[resp.Endpoint.Method]
 	}
-	epSumm.HTTPMethodStatusDist[resp.Endpoint.Method][resp.HTTPStatus]++
+
+	methodRqstStats.TotalRqsts++
+	methodRqstStats.TotalRequestDuration = methodRqstStats.TotalRequestDuration + resp.RequestDuration
+
+	if resp.RequestDuration > methodRqstStats.MaxRqstDuration {
+		methodRqstStats.MaxRqstDuration = resp.RequestDuration
+	}
+	if resp.RequestDuration < methodRqstStats.MinRqstDuration {
+		methodRqstStats.MinRqstDuration = resp.RequestDuration
+	}
+
+	_, ok = epDetail.HTTPMethodStatusDist[resp.Endpoint.Method]
+	if !ok {
+		epDetail.HTTPMethodStatusDist[resp.Endpoint.Method] = make(map[int]int)
+		epDetail.HTTPMethodStatusDist[resp.Endpoint.Method][resp.HTTPStatus] = 0 // This is correct. It'll be incremented below
+	}
+	epDetail.HTTPMethodStatusDist[resp.Endpoint.Method][resp.HTTPStatus]++
 
 }
 

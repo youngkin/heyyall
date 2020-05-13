@@ -223,6 +223,7 @@ func TestResponseStats(t *testing.T) {
 	if expectedJSON.RunSummary.RqstStats != runResults.RunSummary.RqstStats {
 		t.Errorf("expected %+v, got %+v", expectedJSON.RunSummary.RqstStats, runResults.RunSummary.RqstStats)
 	}
+
 	if expectedJSON.EndpointSummary[url1][http.MethodPut] != runResults.EndpointSummary[url1][http.MethodPut] {
 		t.Errorf("expected %d PUTs for %s, got %d", expectedJSON.EndpointSummary[url1][http.MethodPut], url1,
 			runResults.EndpointSummary[url1][http.MethodPut])
@@ -253,6 +254,24 @@ func TestResponseStats(t *testing.T) {
 		t.Errorf("expected %d GETs for %s, got %d", expectedJSON.EndpointSummary[url3][http.MethodDelete], url3,
 			runResults.EndpointSummary[url3][http.MethodDelete])
 	}
+
+	if *expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodGet] != *runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodGet] {
+		t.Errorf("expected %+v for %s method %s, got %+v", expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodGet], url3,
+			http.MethodGet, runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodGet])
+	}
+	if *expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPut] != *runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPut] {
+		t.Errorf("expected %+v for %s method %s, got %+v", expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPut], url3,
+			http.MethodPut, runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPut])
+	}
+	if *expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPost] != *runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPost] {
+		t.Errorf("expected %+v for %s method %s, got %+v", expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPost], url3,
+			http.MethodPost, runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPost])
+	}
+	if *expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodDelete] != *runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodDelete] {
+		t.Errorf("expected %+v for %s method %s, got %+v", expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodDelete], url3,
+			http.MethodDelete, runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodDelete])
+	}
+
 }
 
 // func TestHistogram(t *testing.T) {
