@@ -72,12 +72,10 @@ A more sophisticated configuration can target multiple endpoints and perform mul
 * If you have a Go development environment you can:
   * Clone the respository and build it yourself
   * Run `go install github.com/youngkin/heyyall`
-* Download a binary from [heyyallbin](https://github.com/youngkin/homebrew-heyyallbin). There are binaries for:
-  * Windows 386
-  * Windows AMD64
-  * Linux AMD64
-  * Linux ARM
-  * Mac(Darwin) AMD64
+* Download a binary from [releases page](https://github.com/youngkin/heyyall/releases). There are binaries for:
+  * Windows
+  * Linux AMD64 and ARM (v6 & v7)
+  * MacOS
 * Homebrew support is planned for the future
   
 # Usage
