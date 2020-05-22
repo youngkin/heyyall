@@ -144,8 +144,13 @@ func (rh *ResponseHandler) Start() {
 					return
 				}
 
-				fmt.Printf("\nResponse Time Histogram (seconds):\n")
-				fmt.Println(rh.generateHistogramString(min, max))
+				if max != 0 {
+					fmt.Printf("\nResponse Time Histogram (seconds):\n")
+					fmt.Println(rh.generateHistogramString(min, max))
+				} else {
+					fmt.Println("\nUnable to generate Response Time Histogram.")
+					log.Warn().Msg("'max' histogram bin value was 0, no histogram can be created")
+				}
 
 				fmt.Printf("\n\nRun Results:\n")
 				fmt.Printf("%s\n", string(rsjson[2:len(rsjson)-1]))

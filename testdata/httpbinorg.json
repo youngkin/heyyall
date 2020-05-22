@@ -1,0 +1,15 @@
+{
+    "RqstRate": 0,
+    "MaxConcurrentRqsts": 10,
+    "RunDuration": "0s",
+    "NumRequests": 10,
+    "Endpoints": [
+        {
+            "URL": "https://httpbin.org/anything",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 100
+        }
+    ]
+
+}
