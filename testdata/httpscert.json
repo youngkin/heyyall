@@ -1,8 +1,8 @@
 {
     "RqstRate": 0,
-    "MaxConcurrentRqsts": 10,
+    "MaxConcurrentRqsts": 1,
     "RunDuration": "0s",
-    "NumRequests": 10,
+    "NumRequests": 1,
     "Endpoints": [
         {
             "URL": "https://elev5280.com",

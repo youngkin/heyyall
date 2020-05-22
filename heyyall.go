@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -28,21 +29,24 @@ func main() {
 Usage: heyyall -config <ConfigFileLocation> [flags...]
 
 Options:
-  -loglevel Logging level. Default is 'WARN' (2). 0 is DEBUG, 1 INFO, up to 4 FATAL
-  -detail   Detail level of output report, 'short' or 'long'. Default is 'long'
-  -nf       Normalization factor used to compress the output histogram by eliminating long tails. 
-            Lower values provide a finer grained view of the data at the expense of dropping data
-            associated with the tail of the latency distribution. The latter is partly mitigated by 
-            including a final histogram bin containing the number of observations between it and
-            the previous latency bin. While this doesn't show a detailed distribution of the tail,
-            it does indicate how many observations are included in the tail. 10 is generally a good 
-            starting number but may vary depending on the actual latency distribution and range
-            of latency values. The default is 0 which signifies no normalization will be performed.
-            With very small latencies (microseconds) it's possible that smaller normalization values 
-            could cause the application to panic. Increasing the normalization factor will eliminate 
-            the issue.
-  -cpus     Specifies how many CPUs to use for the test run. The default is 0 which specifies that
-            all CPUs should be used.
+  -loglevel  Logging level. Default is 'WARN' (2). 0 is DEBUG, 1 INFO, up to 4 FATAL
+  -detail    Detail level of output report, 'short' or 'long'. Default is 'long'
+  -nf        Normalization factor used to compress the output histogram by eliminating long tails. 
+             Lower values provide a finer grained view of the data at the expense of dropping data
+             associated with the tail of the latency distribution. The latter is partly mitigated by 
+             including a final histogram bin containing the number of observations between it and
+             the previous latency bin. While this doesn't show a detailed distribution of the tail,
+             it does indicate how many observations are included in the tail. 10 is generally a good 
+             starting number but may vary depending on the actual latency distribution and range
+             of latency values. The default is 0 which signifies no normalization will be performed.
+             With very small latencies (microseconds) it's possible that smaller normalization values 
+             could cause the application to panic. Increasing the normalization factor will eliminate 
+             the issue.
+  -cpus      Specifies how many CPUs to use for the test run. The default is 0 which specifies that
+			 all CPUs should be used.
+  -clientpem The name the to be authenticated client's PEM file
+  -key       The name the client's private key PEM file
+		   
   -help     This usage message
 `
 
@@ -52,6 +56,9 @@ Options:
 	normalizationFactor := flag.Int("nf", 0, "normalization factor used to compress the output histogram by eliminating long tails. If provided, the value must be at least 10. The default is 0 which signifies no normalization will be done")
 	cpus := flag.Int("cpus", 0, "number of CPUs to use for the test run. Default is 0 which specifies all CPUs are to be used.")
 	help := flag.Bool("help", false, "help will emit detailed usage instructions and exit")
+	clientPEM := flag.String("clientpem", "", "Optional, the name of the to be authenticated client's PEM file")
+	privKey := flag.String("key", "", "Optional, the file name of the server's private key file")
+
 	flag.Parse()
 
 	if *help {
@@ -107,11 +114,28 @@ Options:
 	// Give responseHandler a bit of time to start
 	time.Sleep(time.Millisecond * 20)
 
+	// TODO: swap hard coding for config
+	// Hard-coded for now, change to take certificate/key file names from command line
+	// Accepted clients cert setup
+	// clientPrivKey := "/Users/rich_youngkin/certs/privkey.pem"
+	// clientSignedCert := "/Users/rich_youngkin/certs/fullchain.pem"
+	// clientSignedCert := "/Users/rich_youngkin/certs/cert.pem"
+	var cert tls.Certificate
+	if *clientPEM != "" {
+		cert, err = tls.LoadX509KeyPair(*clientPEM, *privKey)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Error creating x509 keypair")
+		}
+	}
+
 	// TODO: Make Transport configurable, including timeout that's currently on the client below
 	t := &http.Transport{
 		MaxIdleConnsPerHost: config.MaxConcurrentRqsts,
 		DisableCompression:  false,
 		DisableKeepAlives:   false,
+		TLSClientConfig: &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		},
 	}
 	client := http.Client{Transport: t, Timeout: time.Second * 15}
 
