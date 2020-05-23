@@ -3,6 +3,8 @@
     "MaxConcurrentRqsts": 1,
     "RunDuration": "0s",
     "NumRequests": 1,
+    "CertFile": "/Users/rich_youngkin/certs/fullchain.pem",
+    "KeyFile": "/Users/rich_youngkin/certs/privkey.pem",
     "Endpoints": [
         {
             "URL": "https://elev5280.com",

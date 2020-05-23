@@ -7,6 +7,7 @@ package internal
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"net/http"
 	"time"
 
@@ -59,11 +60,36 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Durati
 		runDur = api.MaxRunDuration
 	}
 
+	client := r.Client
+	if ep.CertFile != "" {
+		if ep.KeyFile == "" {
+			log.Fatal().Msgf("Endpoint: %s, Endpoint.CertFile specified: %s, Endpoint.KeyFile is not", ep.URL, ep.CertFile)
+		}
+		log.Debug().Msgf("Endpoint %s is overriding SSL certificate using certificate file %s", ep.URL, ep.CertFile)
+		cert, err := tls.LoadX509KeyPair(ep.CertFile, ep.KeyFile)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Error creating x509 keypair")
+		}
+		t1, ok := r.Client.Transport.(*http.Transport)
+		if !ok {
+			log.Fatal().Msg("Requestor.ProcessRqst(): Could not cast Client.Transport to *http.Transport")
+		}
+		t2 := &http.Transport{
+			MaxIdleConnsPerHost: t1.MaxConnsPerHost,
+			DisableCompression:  t1.DisableCompression,
+			DisableKeepAlives:   t1.DisableKeepAlives,
+			TLSClientConfig: &tls.Config{
+				Certificates: []tls.Certificate{cert},
+			},
+		}
+		client.Transport = t2
+	}
+
 	log.Debug().Msgf("Setting 'timesUp' duration to %d seconds", runDur/time.Second)
 	timesUp := time.After(runDur)
 	for i := 0; i < numRqsts; i++ {
 		start := time.Now()
-		resp, err := r.Client.Do(req)
+		resp, err := client.Do(req)
 		if resp != nil {
 			defer resp.Body.Close()
 		}

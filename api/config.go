@@ -39,8 +39,16 @@ type Endpoint struct {
 	// LoadTestConfig.RunDuration for the behavior when both
 	// RunDuration and NumRequests are specified.
 	NumRequests int
-	// Accept header
-	// content type header
+	// KeyFile is the name of a file, in PEM format, that contains an SSL private
+	// key. It will only be used if it has a non-empty value. It will override
+	// the KeyFile specified at the LoadTestConfig level.
+	KeyFile string
+	// CertFile is the name of a file, in PEM format, that contains an SSL
+	// certificate. It will only be used if it has a non-empty value. It will
+	// override the CertificateFile specified at the LoadTestConfig level.
+	CertFile string
+	// TODO: Accept header
+	// TODO: content type header
 }
 
 // LoadTestConfig contains all the information needed to configure
@@ -65,6 +73,14 @@ type LoadTestConfig struct {
 	// CSV format. Acceptable values are "JSON" and "CSV". If not
 	// specified output will be in JSON format.
 	OutputType string
+	// KeyFile is the name of a file, in PEM format, that contains an SSL private
+	//  key. It will only be used if it has a non-empty value. It can be overridden
+	// at the Endpoint level.
+	KeyFile string
+	// CertFile is the name of a file, in PEM format, that contains ab SSL
+	// certificate. It will only be used if it has a non-empty value. It can be
+	// overridden, along with the KeyFile, at the Endpoint level.
+	CertFile string
 	// Endpoints is the set of endpoints (Endpoint) to make requests to
 	Endpoints []Endpoint
 }

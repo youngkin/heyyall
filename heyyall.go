@@ -44,9 +44,6 @@ Options:
              the issue.
   -cpus      Specifies how many CPUs to use for the test run. The default is 0 which specifies that
 			 all CPUs should be used.
-  -clientpem The name the to be authenticated client's PEM file
-  -key       The name the client's private key PEM file
-		   
   -help     This usage message
 `
 
@@ -56,8 +53,6 @@ Options:
 	normalizationFactor := flag.Int("nf", 0, "normalization factor used to compress the output histogram by eliminating long tails. If provided, the value must be at least 10. The default is 0 which signifies no normalization will be done")
 	cpus := flag.Int("cpus", 0, "number of CPUs to use for the test run. Default is 0 which specifies all CPUs are to be used.")
 	help := flag.Bool("help", false, "help will emit detailed usage instructions and exit")
-	clientPEM := flag.String("clientpem", "", "Optional, the name of the to be authenticated client's PEM file")
-	privKey := flag.String("key", "", "Optional, the file name of the server's private key file")
 
 	flag.Parse()
 
@@ -114,15 +109,9 @@ Options:
 	// Give responseHandler a bit of time to start
 	time.Sleep(time.Millisecond * 20)
 
-	// TODO: swap hard coding for config
-	// Hard-coded for now, change to take certificate/key file names from command line
-	// Accepted clients cert setup
-	// clientPrivKey := "/Users/rich_youngkin/certs/privkey.pem"
-	// clientSignedCert := "/Users/rich_youngkin/certs/fullchain.pem"
-	// clientSignedCert := "/Users/rich_youngkin/certs/cert.pem"
 	var cert tls.Certificate
-	if *clientPEM != "" {
-		cert, err = tls.LoadX509KeyPair(*clientPEM, *privKey)
+	if config.CertFile != "" && config.KeyFile != "" {
+		cert, err = tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
 		if err != nil {
 			log.Fatal().Err(err).Msg("Error creating x509 keypair")
 		}

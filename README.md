@@ -221,8 +221,17 @@ Note that even though a 10 second `RunDuration` was specified the actual run tim
 
 Most of these behaviors are a result of design decisions and as such can be changed with a different implementation. But alternate implementations may have their own idiosyncracies. If the behavior described here becomes an issue the design decisions can be revisited.
 
+# Known issues
+
+Some HTTPS services require TLS renegotiation. Up to and including Go 1.14 the Go crypto/tls implementation does not support TLS renegotiation. This may change as soon as the 1.15 release due out in August 2020. If a service does require TLS renegotiation a warning like the following will be printed.
+
+```
+WRN Requestor: error sending request error="Get \"https://prod.idrix.eu/secure/\": local error: tls: no renegotiation"
+```
+
 # Future plans
 
 1. More metrics will be added to gain feature parity with `hey`. Mainly this means metrics for latency distribution (i.e., quantiles) and high level TCP/IP and HTTP related metrics like DNS lookup latencies and HTTP request write latencies.
 3. Support for other configuration and output format types may be added, for example YAML and output in CSV format could be added.
 4. Ability to specify the number of requests to be run at an endpoint level. If added this would be a strict specification in the sense that measures will be taken to ensure that the exact number of requests will be run and restrictions will be put in place to ensure related calculations don't have non-integer results.
+5. Ability to script scenarios comprised of mutliple different requests to a single Endpoint. `heyyall` currently on supports a single request to a given endpoint.
