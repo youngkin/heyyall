@@ -7,6 +7,8 @@
 
 `heyyall` was created to facilitate testing a set of related services each of which expose their own HTTP endpoints and resources. In order to test the application as a whole while exercising the full range of capability a more powerful tool was needed.
 
+`heyyall` can also be configured to work with HTTPS services via a client certificate and private key.
+
 # Examples
 
 Running a test can be accomplished by running:
@@ -23,18 +25,22 @@ Configuration may be as simple as targeting a single endpoint:
     "MaxConcurrentRqsts": 50,
     "RunDuration": "0s",
     "NumRequests": 1000,
+    "KeyFile": "/path/to/private/key/file",
+    "CertFile": "path/to/certificate/file",
     "Endpoints": [
         {
-            "URL": "http://accountd.kube/users/1",
+            "URL": "https://accountd.kube/users/1",
             "Method": "GET",
             "RqstBody": "",
             "RqstPercent": 100
+            "KeyFile": "/path/to/private/key/file",
+            "CertFile": "path/to/certificate/file",
         }
     ]
 }
 ```
 
-A more sophisticated configuration can target multiple endpoints and perform multiple operations:
+A more sophisticated configuration can target multiple endpoints and perform multiple operations (this is not an HTTPS example):
 
 ``` JSON
 {
@@ -161,11 +167,15 @@ Specifying `heyyall`'s runtime behavior is done via a configuration file as show
     "MaxConcurrentRqsts": <Integer, specifies how many requests can be run concurrently>,
     "RunDuration": <String, specifies the length of the run. Must be `0s` if `NumRequests` is specified.>,
     "NumRequests": <Integer, specifies the total number of requests to be made. Must be `0` if `RunDuration` is specified>,
+    "KeyFile": <String, specifies the path to a file containing a PEM encoded private key>,
+    "CertFile": <String, specifies the path to a file containing a PEM encoded certificate>,
     "Endpoints": [
         {
             "URL": <String, the resource URL>,
             "Method":<String, the HTTP method. One of `GET`, `POST`, `PUT`, or `DELETE`>,
             "RqstBody": <String, the body of the request, e.g., the content to be `POST`ed>,
+            "KeyFile": <String, specifies the path to a file containing a PEM encoded private key>,
+            "CertFile": <String, specifies the path to a file containing a PEM encoded certificate>,
             "RqstPercent": <Integer, the relative percent of the total requests will be made to this endpoint and method>,
         },
         {
@@ -175,11 +185,21 @@ Specifying `heyyall`'s runtime behavior is done via a configuration file as show
 }
 ```
 
-There are a couple of items of note:
+There are a few items of note:
 
 1. `RunDuration` and `NumRequests` are mutually exclusive.
 2. The total of `RqstPercent` across all endpoints must sum to 100, as in 100%.
 3. `MaxConcurrentRqsts` must be greater than or equal to the number of `Endpoints` specified. This is based on the assumption that specifying an `Endpoint` means the intention is to execute requests against that `Endpoint`. If the condition specified here isn't met than at least one `Endpoint` won't get requests. This is an artifact of the implementation, but it seems like a reasonable restriction.
+4. `"KeyFile"` is optional and specifies a client's PEM encoded private key. It can be configured at both the global and Endpoint levels. If specified for an Endpoint it will override the global specification.
+5. `"CertFile"` is optional and represent a client's PEM encoded public certificate. It can be configured at both the global and Endpoint levels. If specified for an Endpoint it will override the global specification.
+
+
+
+
+
+## HTTPS support
+
+As mentioned above `heyyall` also supports client authentication and authorization via SSL on an HTTP request. The `"KeyFile"` and `"CertFile"` configuration fields provide the required information. These must both be PEM files.
 
 # Runtime behavior
 
@@ -223,7 +243,7 @@ Most of these behaviors are a result of design decisions and as such can be chan
 
 # Known issues
 
-Some HTTPS services require TLS renegotiation. Up to and including Go 1.14 the Go crypto/tls implementation does not support TLS renegotiation. This may change as soon as the 1.15 release due out in August 2020. If a service does require TLS renegotiation a warning like the following will be printed.
+Some HTTPS services require TLS renegotiation. Up to and including Go 1.14 the Go crypto/tls implementation does not support TLS renegotiation. This may change as soon as the 1.15 release due out in August 2020. If a service does require TLS renegotiation a warning like the following will be printed and the request will not succeed.
 
 ```
 WRN Requestor: error sending request error="Get \"https://prod.idrix.eu/secure/\": local error: tls: no renegotiation"
