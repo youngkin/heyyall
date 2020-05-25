@@ -149,7 +149,7 @@ func (rh *ResponseHandler) Start() {
 					fmt.Println(rh.generateHistogramString(min, max))
 				} else {
 					fmt.Println("\nUnable to generate Response Time Histogram.")
-					log.Warn().Msg("'max' histogram bin value was 0, no histogram can be created")
+					log.Error().Msg("'max' histogram bin value was 0, no histogram can be created")
 				}
 
 				fmt.Printf("\n\nRun Results:\n")
@@ -264,61 +264,59 @@ func (rh *ResponseHandler) accumulateResponseStats(resp Response, totalRunTime *
 // taken from the result set, referencing the number of observations in the 'range'
 // of that number. It returns the min and max values for the histogram, i.e., the
 // min and max number of observations in the histogram.
-func (rh *ResponseHandler) generateHistogram(runResults *RunResults) (int, int) {
+func (rh *ResponseHandler) generateHistogram(runResults *RunResults) (minBinCount, maxBinCount int) {
 	numBins := calcNumBinsSturgesMethod(len(rh.timingResults))
 	// numBins := calcNumBinsRiceMethod(len(rh.timingResults))
 	runResults.RunSummary.RqstStats.NormalizedMaxRqstDuration = time.Duration(rh.NormFactor) * runResults.RunSummary.RqstStats.MinRqstDuration
 	runResults.RunSummary.RqstStats.NormalizedMaxRqstDurationStr = runResults.RunSummary.RqstStats.NormalizedMaxRqstDuration.String()
-	timeRange := runResults.RunSummary.RqstStats.MaxRqstDuration - runResults.RunSummary.RqstStats.MinRqstDuration
-	if rh.NormFactor > 1 {
-		timeRange = runResults.RunSummary.RqstStats.NormalizedMaxRqstDuration - runResults.RunSummary.RqstStats.MinRqstDuration
-	}
-	binWidth := float64(timeRange) / float64(numBins)
-	if binWidth == 0 {
-		binWidth = float64(runResults.RunSummary.RqstStats.MinRqstDuration + 1)
-	}
 
-	rh.histogram = make(map[float64]int)
-	bins := make([]float64, 0, numBins)
+	binWidth := float64(runResults.RunSummary.RqstStats.MaxRqstDuration) / float64(numBins)
+	if rh.NormFactor > 1 {
+		maxNormDur := time.Duration(math.Min(float64(runResults.RunSummary.RqstStats.MaxRqstDuration),
+			float64(runResults.RunSummary.RqstStats.NormalizedMaxRqstDuration)))
+		binWidth = float64(maxNormDur) / float64(numBins)
+	}
+	rh.histogram = make(map[float64]int, numBins)
+	binValues := make([]float64, 0, numBins)
 
 	for i := 1; i <= numBins; i++ {
 		rh.histogram[float64(i)*binWidth] = 0
-		bins = append(bins, float64(i)*binWidth)
+		binValues = append(binValues, float64(i)*binWidth)
 	}
 
-	maxBinVal, minBinVal := 0, math.MaxInt32
+	maxBinCount, minBinCount = 0, math.MaxInt32
 	for _, obser := range rh.timingResults {
-		// TODO: Might be able to get this to O(n*Log(n))) if did a binary search on bins as it's sorted
-		for _, bin := range bins {
-			if float64(obser) < bin {
-				rh.histogram[bin]++
-				if rh.histogram[bin] > maxBinVal {
-					maxBinVal = rh.histogram[bin]
+		// TODO: Might be able to get this to O(n*Log(n))) if did a binary search on binKeys as it's sorted
+		for _, binVal := range binValues {
+			if float64(obser) <= binVal {
+				rh.histogram[binVal]++
+				if rh.histogram[binVal] > maxBinCount {
+					maxBinCount = rh.histogram[binVal]
 				}
-				if rh.histogram[bin] < minBinVal {
-					minBinVal = rh.histogram[bin]
+				if rh.histogram[binVal] < minBinCount {
+					minBinCount = rh.histogram[binVal]
 				}
 				break
 			}
 		}
 	}
 
-	if rh.NormFactor > 1 {
+	if rh.NormFactor > 1 && runResults.RunSummary.RqstStats.NormalizedMaxRqstDuration < runResults.RunSummary.RqstStats.MaxRqstDuration {
 		// If the histogram is being normalized, pick up all the observations greater than largest bin's key
-		// into a single bin. This will at least show how many observations occurred between 'largestBinKey'
-		// and the MaxRqstDuration.
+		// into a single bin. This will show how many observations occurred between 'largestBinKey' and the
+		// MaxRqstDuration.
 		largestBinKey := binWidth * float64(numBins)
-		var tailBin int
+		var tailBinCount int
 		for _, obser := range rh.timingResults {
-			if float64(obser) >= largestBinKey {
-				tailBin++
+			if float64(obser) > largestBinKey {
+				tailBinCount++
 			}
 		}
-		rh.histogram[float64(runResults.RunSummary.RqstStats.MaxRqstDuration)] = tailBin
-		maxBinVal = int(math.Max(float64(tailBin), float64(maxBinVal)))
+		rh.histogram[float64(runResults.RunSummary.RqstStats.MaxRqstDuration)] = tailBinCount
+		maxBinCount = int(math.Max(float64(tailBinCount), float64(maxBinCount)))
 	}
 
-	return minBinVal, maxBinVal
+	return minBinCount, maxBinCount
 }
 
 func (rh *ResponseHandler) printHistogram(min, max int) {

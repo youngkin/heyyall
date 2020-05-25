@@ -26,7 +26,7 @@ var (
 	goldenFileSuffix = ".golden"
 )
 
-// TestResponseHapopyPath is interesting given that it captures stdout
+// TestResponseHappyPath is interesting given that it captures stdout
 // for a later comparison for testing. However, it's not practical due
 // to timing differences from run-to-run. As a result run results are
 // not comparable between runs.
@@ -274,31 +274,160 @@ func TestResponseStats(t *testing.T) {
 
 }
 
-// func TestHistogram(t *testing.T) {
-// 	numEntries := 1000
-// 	rh := &ResponseHandler{
-// 		timingResults: make([]time.Duration, 0, numEntries),
-// 	}
+// TestGenHistogramSturges validates histogram generation when the Sturges method
+// for calculating the number of histogram bins is used. The other method is the
+// Rice method.
+func TestGenHistogramSturges(t *testing.T) {
+	testCases := []struct {
+		name              string
+		expectedMaxBinVal int
+		expectedMinBinVal int
+		expectedHist      map[float64]int
+		respHandler       *ResponseHandler
+		runResults        RunResults
+	}{
+		{
+			name:              "No observations, nf = 0",
+			expectedMaxBinVal: 0,
+			expectedMinBinVal: math.MaxInt32,
+			expectedHist:      map[float64]int{},
+			respHandler: &ResponseHandler{
+				timingResults: []time.Duration{},
+				NormFactor:    0,
+			},
+			runResults: RunResults{},
+		},
+		{
+			name:              "Observations: 1; nf = 0",
+			expectedMaxBinVal: 1,
+			expectedMinBinVal: 1,
+			expectedHist:      map[float64]int{1: 1},
+			respHandler: &ResponseHandler{
+				timingResults: []time.Duration{time.Nanosecond * 1},
+				NormFactor:    0,
+			},
+			runResults: RunResults{
+				RunSummary: RunSummary{
+					RqstStats: RqstStats{
+						MinRqstDuration: time.Nanosecond * 1,
+						MaxRqstDuration: time.Nanosecond * 1,
+					},
+				},
+			},
+		},
+		{
+			name:              "Observations: 3, 4; nf = 0",
+			expectedMaxBinVal: 2,
+			expectedMinBinVal: 0,
+			expectedHist:      map[float64]int{2: 0, 4: 2},
+			respHandler: &ResponseHandler{
+				timingResults: []time.Duration{time.Nanosecond * 3, time.Nanosecond * 4},
+				NormFactor:    0,
+			},
+			runResults: RunResults{
+				RunSummary: RunSummary{
+					RqstStats: RqstStats{
+						MinRqstDuration: time.Nanosecond * 3,
+						MaxRqstDuration: time.Nanosecond * 4,
+					},
+				},
+			},
+		},
+		{
+			name:              "Observations: 2, 4; nf = 0",
+			expectedMaxBinVal: 1,
+			expectedMinBinVal: 1,
+			expectedHist:      map[float64]int{2: 1, 4: 1},
+			respHandler: &ResponseHandler{
+				timingResults: []time.Duration{time.Nanosecond * 2, time.Nanosecond * 4},
+				NormFactor:    0,
+			},
+			runResults: RunResults{
+				RunSummary: RunSummary{
+					RqstStats: RqstStats{
+						MinRqstDuration: time.Nanosecond * 2,
+						MaxRqstDuration: time.Nanosecond * 4,
+					},
+				},
+			},
+		},
+		{
+			name:              "Observations 1, 2, 3, 4; nf = 0",
+			expectedMaxBinVal: 2,
+			expectedMinBinVal: 1,
+			expectedHist:      map[float64]int{1.3333333333333333: 1, 2.6666666666666665: 1, 4: 2},
+			respHandler: &ResponseHandler{
+				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
+				NormFactor:    0,
+			},
+			runResults: RunResults{
+				RunSummary: RunSummary{
+					RqstStats: RqstStats{
+						MinRqstDuration: time.Nanosecond * 1,
+						MaxRqstDuration: time.Nanosecond * 4,
+					},
+				},
+			},
+		},
+		{
+			name:              "Observations 1, 2, 3, 4; nf = 3",
+			expectedMaxBinVal: 1,
+			expectedMinBinVal: 1,
+			expectedHist:      map[float64]int{1: 1, 2: 1, 3: 1, 4: 1},
+			respHandler: &ResponseHandler{
+				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
+				NormFactor:    3,
+			},
+			runResults: RunResults{
+				RunSummary: RunSummary{
+					RqstStats: RqstStats{
+						MinRqstDuration: time.Nanosecond * 1,
+						MaxRqstDuration: time.Nanosecond * 4,
+					},
+				},
+			},
+		},
+	}
 
-// 	for i := 0; i < numEntries; i++ {
-// 		x := generateNormalDistribution(0.5, 1)
-// 		rh.timingResults = append(rh.timingResults, time.Duration(x*float64(time.Nanosecond*200)))
-// 	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			minBinKeyVal, maxBinKeyVal := tc.respHandler.generateHistogram(&tc.runResults)
+			if maxBinKeyVal != tc.expectedMaxBinVal {
+				t.Errorf("expected MaxBinVal %d,\n got %d", tc.expectedMaxBinVal, maxBinKeyVal)
+			}
+			if maxBinKeyVal != tc.expectedMaxBinVal {
+				t.Errorf("expected MinBinVal %d, got %d", tc.expectedMinBinVal, minBinKeyVal)
+			}
+			if !histEqual(tc.expectedHist, tc.respHandler.histogram) {
+				t.Errorf("expected %+v, got %+v", tc.expectedHist, tc.respHandler.histogram)
+			}
+		})
+	}
+}
 
-// 	// for i, v := range rh.timingResults {
-// 	// t.Logf("timingResults[%d] = %d", i, v)
-// 	// }
+func histEqual(a, b map[float64]int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	akeys := make([]float64, len(a))
+	i := 0
+	for k := range a {
+		akeys[i] = k
+		i++
+	}
 
-// 	// TODO: Need to calculate this
-// 	rqstStats := RqstStats{MinRqstDuration: 0, MaxRqstDuration: 267}
-// 	runResults := RunResults{RunSummary: RunSummary{RqstStats: rqstStats}}
+	for _, k := range akeys {
+		b, ok := b[k]
+		if !ok {
+			return false
+		}
+		if b != a[k] {
+			return false
+		}
+	}
 
-// 	min, max := rh.generateHistogram(&runResults)
-// 	t.Logf("min: %d, max: %d, Number of histogram entries: %d", min, max, len(rh.histogram))
-
-// 	h := rh.generateHistogramString(min, max)
-// 	t.Logf("Generated histogram: \n%s", h)
-// }
+	return true
+}
 
 func updateGoldenFile(t *testing.T, testName string, contents string) {
 	gf := filepath.Join(goldenFileDir, testName+goldenFileSuffix)

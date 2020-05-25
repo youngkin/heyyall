@@ -1,8 +1,8 @@
 {
     "RqstRate": 1000,
     "MaxConcurrentRqsts": 3,
-    "RunDuration": "90s",
-    "NumRequests": 0,
+    "RunDuration": "0s",
+    "NumRequests": 1000,
     "OutputType": "JSON",
     "Endpoints": [
         {

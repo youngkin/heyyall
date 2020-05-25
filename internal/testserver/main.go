@@ -5,9 +5,8 @@
 package main
 
 // This is a test https server. It can be used to test heyyall's client authentication capability.
-// Note: as written it users a Let's Encrypt certificate/private-key for both client and server
-// authentication. The code below, as currently written, will have to be updated if the certifcate/
-// private key referenced are not available.
+// Note: as written it uses a Let's Encrypt certificate/private-key for both client and server
+// authentication.
 //
 // This code was influenced by an example project in GitHub - https://github.com/jcbsmpsn/golang-https-example
 
@@ -55,7 +54,7 @@ Options:
 
 	server := &http.Server{
 		Addr: ":" + *port,
-		// 5 min to allow for delays when OSx prompts for username/password
+		// 5 min to allow for delays when 'curl' on OSx prompts for username/password
 		ReadTimeout:  5 * time.Minute,
 		WriteTimeout: 10 * time.Second,
 		TLSConfig:    tlsConfig(*host, *clientPEM),
