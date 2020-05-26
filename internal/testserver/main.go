@@ -5,8 +5,6 @@
 package main
 
 // This is a test https server. It can be used to test heyyall's client authentication capability.
-// Note: as written it uses a Let's Encrypt certificate/private-key for both client and server
-// authentication.
 //
 // This code was influenced by an example project in GitHub - https://github.com/jcbsmpsn/golang-https-example
 

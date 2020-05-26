@@ -108,7 +108,9 @@ type ResponseHandler struct {
 	NumRqsts      int
 	NormFactor    int
 	timingResults []time.Duration
-	histogram     map[float64]int
+	// histogram contains a count of observations that are <= to the value of the key.
+	// The key is a number that represents response duration.
+	histogram map[float64]int
 }
 
 // Start begins the process of accepting responses. It expects to be run as a goroutine.
@@ -285,19 +287,27 @@ func (rh *ResponseHandler) generateHistogram(runResults *RunResults) (minBinCoun
 	}
 
 	maxBinCount, minBinCount = 0, math.MaxInt32
-	for _, obser := range rh.timingResults {
+
+	// NOTE: this algorithm depends on 'binValues' being sorted in ascending order. This ensures
+	// that the observation gets assigned to the correct bin, i.e., the lowest bin value that is
+	// >= to the observation. 'binValues' is a slice whose values are appended in ascending order,
+	// so it is already sorted.
+	for _, observation := range rh.timingResults {
 		// TODO: Might be able to get this to O(n*Log(n))) if did a binary search on binKeys as it's sorted
 		for _, binVal := range binValues {
-			if float64(obser) <= binVal {
+			if float64(observation) <= binVal {
 				rh.histogram[binVal]++
 				if rh.histogram[binVal] > maxBinCount {
 					maxBinCount = rh.histogram[binVal]
 				}
-				if rh.histogram[binVal] < minBinCount {
-					minBinCount = rh.histogram[binVal]
-				}
 				break
 			}
+		}
+	}
+
+	for _, v := range rh.histogram {
+		if v < minBinCount {
+			minBinCount = v
 		}
 	}
 
@@ -307,13 +317,14 @@ func (rh *ResponseHandler) generateHistogram(runResults *RunResults) (minBinCoun
 		// MaxRqstDuration.
 		largestBinKey := binWidth * float64(numBins)
 		var tailBinCount int
-		for _, obser := range rh.timingResults {
-			if float64(obser) > largestBinKey {
+		for _, observation := range rh.timingResults {
+			if float64(observation) > largestBinKey {
 				tailBinCount++
 			}
 		}
 		rh.histogram[float64(runResults.RunSummary.RqstStats.MaxRqstDuration)] = tailBinCount
 		maxBinCount = int(math.Max(float64(tailBinCount), float64(maxBinCount)))
+		minBinCount = int(math.Min(float64(tailBinCount), float64(minBinCount)))
 	}
 
 	return minBinCount, maxBinCount

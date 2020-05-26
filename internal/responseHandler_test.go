@@ -370,6 +370,8 @@ func TestGenHistogramSturges(t *testing.T) {
 			},
 		},
 		{
+			// 4 observations would normally result in 3 bins, but the nf of 3 results
+			// in a 4th tailBin getting added to collect the tail (which is 1 in this case)
 			name:              "Observations 1, 2, 3, 4; nf = 3",
 			expectedMaxBinVal: 1,
 			expectedMinBinVal: 1,
@@ -387,6 +389,68 @@ func TestGenHistogramSturges(t *testing.T) {
 				},
 			},
 		},
+		{
+			// 4 observations result in 3 bins. Specifying a 'nf' could result in a 4th, the tailBin.
+			// However, a 'nf' of 10 results in a MaxNormalizedRqstDuration of 10, which is greater
+			// than the MaxRqstDuration 4. Using the normalized duration of 10 would result in a histogram
+			// with less meaning than using the original MaxRqstDuration so in this case 'nf' will be ignored.
+			name:              "Observations 1, 2, 3, 4; nf = 10",
+			expectedMaxBinVal: 2,
+			expectedMinBinVal: 1,
+			expectedHist:      map[float64]int{1.3333333333333333: 1, 2.6666666666666665: 1, 4: 2},
+			respHandler: &ResponseHandler{
+				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
+				NormFactor:    10,
+			},
+			runResults: RunResults{
+				RunSummary: RunSummary{
+					RqstStats: RqstStats{
+						MinRqstDuration: time.Nanosecond * 1,
+						MaxRqstDuration: time.Nanosecond * 4,
+					},
+				},
+			},
+		},
+		{
+			// 8 observations results in 4 bins
+			name:              "Observations 1, 2, 2, 2, 3, 10, 100, 200",
+			expectedMaxBinVal: 6,
+			expectedMinBinVal: 0,
+			expectedHist:      map[float64]int{50: 6, 100: 1, 150: 0, 200: 1},
+			respHandler: &ResponseHandler{
+				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 2, time.Nanosecond * 2,
+					time.Nanosecond * 3, time.Nanosecond * 10, time.Nanosecond * 100, time.Nanosecond * 200},
+				NormFactor: 0,
+			},
+			runResults: RunResults{
+				RunSummary: RunSummary{
+					RqstStats: RqstStats{
+						MinRqstDuration: time.Nanosecond * 1,
+						MaxRqstDuration: time.Nanosecond * 200,
+					},
+				},
+			},
+		},
+		{
+			// Expect 4 bins, binwidth of 0.5, and a tailBin due to the long tail
+			name:              "Observations 1, 2, 2, 2, 3, 10, 100, 200, nf = 2",
+			expectedMaxBinVal: 4,
+			expectedMinBinVal: 0,
+			expectedHist:      map[float64]int{0.5: 0, 1: 1, 1.5: 0, 2: 3, 200: 4},
+			respHandler: &ResponseHandler{
+				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 2, time.Nanosecond * 2,
+					time.Nanosecond * 3, time.Nanosecond * 10, time.Nanosecond * 100, time.Nanosecond * 200},
+				NormFactor: 2,
+			},
+			runResults: RunResults{
+				RunSummary: RunSummary{
+					RqstStats: RqstStats{
+						MinRqstDuration: time.Nanosecond * 1,
+						MaxRqstDuration: time.Nanosecond * 200,
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -395,7 +459,7 @@ func TestGenHistogramSturges(t *testing.T) {
 			if maxBinKeyVal != tc.expectedMaxBinVal {
 				t.Errorf("expected MaxBinVal %d,\n got %d", tc.expectedMaxBinVal, maxBinKeyVal)
 			}
-			if maxBinKeyVal != tc.expectedMaxBinVal {
+			if minBinKeyVal != tc.expectedMinBinVal {
 				t.Errorf("expected MinBinVal %d, got %d", tc.expectedMinBinVal, minBinKeyVal)
 			}
 			if !histEqual(tc.expectedHist, tc.respHandler.histogram) {
