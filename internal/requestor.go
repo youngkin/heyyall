@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/tls"
 	"net/http"
+	"net/http/httptrace"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -45,6 +46,31 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Durati
 		log.Warn().Err(err).Msgf("Requestor unable to create http request")
 		return
 	}
+
+	var dnsStart, dnsDone, connDone, gotResp, tlsStart, tlsDone time.Time
+
+	trace := &httptrace.ClientTrace{
+		DNSStart: func(_ httptrace.DNSStartInfo) { dnsStart = time.Now() },
+		DNSDone:  func(_ httptrace.DNSDoneInfo) { dnsDone = time.Now() },
+		ConnectStart: func(_, _ string) {
+			if dnsDone.IsZero() {
+				// connecting directly to IP
+				dnsDone = time.Now()
+			}
+		},
+		ConnectDone: func(net, addr string, err error) {
+			if err != nil {
+				log.Fatal().Msgf("unable to connect to host %v: %v", addr, err)
+			}
+			connDone = time.Now()
+
+		},
+		GotConn:              func(_ httptrace.GotConnInfo) { connDone = time.Now() },
+		GotFirstResponseByte: func() { gotResp = time.Now() },
+		TLSHandshakeStart:    func() { tlsStart = time.Now() },
+		TLSHandshakeDone:     func(_ tls.ConnectionState, _ error) { tlsDone = time.Now() },
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 
 	// At this point we know one of numRqsts or runDur is non-zero. Whichever one
 	// is non-zero will be set to a super-high number to effectively disable its
@@ -105,9 +131,13 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Durati
 			log.Debug().Msg("Requestor runDur expired, exiting")
 			return
 		case r.ResponseC <- Response{
-			HTTPStatus:      resp.StatusCode,
-			Endpoint:        api.Endpoint{URL: ep.URL, Method: ep.Method},
-			RequestDuration: time.Since(start),
+			HTTPStatus:           resp.StatusCode,
+			Endpoint:             api.Endpoint{URL: ep.URL, Method: ep.Method},
+			RequestDuration:      time.Since(start),
+			DNSLookupDuration:    dnsDone.Sub(dnsStart),
+			TCPConnDuration:      connDone.Sub(dnsDone),
+			RoundTripDuration:    gotResp.Sub(connDone),
+			TLSHandshakeDuration: tlsDone.Sub(tlsStart),
 		}:
 		}
 

@@ -292,7 +292,7 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: math.MaxInt32,
 			expectedHist:      map[float64]int{},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{},
+				TimingResults: []time.Duration{},
 				NormFactor:    0,
 			},
 			runResults: RunResults{},
@@ -303,7 +303,7 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 1,
 			expectedHist:      map[float64]int{1: 1},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 1},
+				TimingResults: []time.Duration{time.Nanosecond * 1},
 				NormFactor:    0,
 			},
 			runResults: RunResults{
@@ -321,7 +321,7 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 0,
 			expectedHist:      map[float64]int{2: 0, 4: 2},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 3, time.Nanosecond * 4},
+				TimingResults: []time.Duration{time.Nanosecond * 3, time.Nanosecond * 4},
 				NormFactor:    0,
 			},
 			runResults: RunResults{
@@ -339,7 +339,7 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 1,
 			expectedHist:      map[float64]int{2: 1, 4: 1},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 2, time.Nanosecond * 4},
+				TimingResults: []time.Duration{time.Nanosecond * 2, time.Nanosecond * 4},
 				NormFactor:    0,
 			},
 			runResults: RunResults{
@@ -357,7 +357,7 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 1,
 			expectedHist:      map[float64]int{1.3333333333333333: 1, 2.6666666666666665: 1, 4: 2},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
+				TimingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
 				NormFactor:    0,
 			},
 			runResults: RunResults{
@@ -377,7 +377,7 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 1,
 			expectedHist:      map[float64]int{1: 1, 2: 1, 3: 1, 4: 1},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
+				TimingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
 				NormFactor:    3,
 			},
 			runResults: RunResults{
@@ -399,7 +399,7 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 1,
 			expectedHist:      map[float64]int{1.3333333333333333: 1, 2.6666666666666665: 1, 4: 2},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
+				TimingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
 				NormFactor:    10,
 			},
 			runResults: RunResults{
@@ -418,7 +418,7 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 0,
 			expectedHist:      map[float64]int{50: 6, 100: 1, 150: 0, 200: 1},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 2, time.Nanosecond * 2,
+				TimingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 2, time.Nanosecond * 2,
 					time.Nanosecond * 3, time.Nanosecond * 10, time.Nanosecond * 100, time.Nanosecond * 200},
 				NormFactor: 0,
 			},
@@ -438,7 +438,7 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 0,
 			expectedHist:      map[float64]int{0.5: 0, 1: 1, 1.5: 0, 2: 3, 200: 4},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 2, time.Nanosecond * 2,
+				TimingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 2, time.Nanosecond * 2,
 					time.Nanosecond * 3, time.Nanosecond * 10, time.Nanosecond * 100, time.Nanosecond * 200},
 				NormFactor: 2,
 			},

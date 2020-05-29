@@ -82,6 +82,7 @@ type RunSummary struct {
 	RunDuration time.Duration
 	// RunDurationStr is the string representation of RunDuration
 	RunDurationStr string
+
 	// ResponseDistribution is distribution of response times. There will be
 	// 11 bucket; 10 microseconds or less, between 10us and 100us,
 	// 100us and 1ms, 1ms to 10ms, 10ms to 100ms, 100ms to 1s, 1s to 1.1s,
@@ -95,19 +96,31 @@ type RunSummary struct {
 	// MinRqstRatePerSec is the maximum request rate per second
 	// over 1/10th of the run duration or number of requests
 	//MinRqstRatePerSec int
+
 	// RqstStats is a summary of runtime statistics
 	RqstStats RqstStats
+	// DNSLookup records how long it took to resolve the hostname to an IP Address
+	DNSLookup []time.Duration
+	// TCPConnSetup records how long it took to setup the TCP connection
+	TCPConnSetup []time.Duration
+	// RqstRoundTrip records duration from the time the TCP connection was setup
+	// until the response was received
+	RqstRoundTrip []time.Duration
+	// TLSHandshake records the time it took to complete the TLS negotiation with
+	// the server. It's only meaningful for HTTPS connections
+	TLSHandshake []time.Duration
 }
 
 // ResponseHandler is responsible for accepting, summarizing, and reporting
 // on the overall load test results.
 type ResponseHandler struct {
-	ReportDetail  ReportDetail
-	ResponseC     chan Response
-	DoneC         chan struct{}
-	NumRqsts      int
-	NormFactor    int
-	timingResults []time.Duration
+	ReportDetail ReportDetail
+	ResponseC    chan Response
+	DoneC        chan struct{}
+	NumRqsts     int
+	NormFactor   int
+	// TimingResults contains the duration of each request.
+	TimingResults []time.Duration
 	// histogram contains a count of observations that are <= to the value of the key.
 	// The key is a number that represents response duration.
 	histogram map[float64]int
@@ -117,7 +130,7 @@ type ResponseHandler struct {
 func (rh *ResponseHandler) Start() {
 	log.Debug().Msg("ResponseHandler starting")
 
-	rh.timingResults = make([]time.Duration, 0, int(math.Min(float64(rh.NumRqsts), float64(api.MaxRqsts))))
+	rh.TimingResults = make([]time.Duration, 0, int(math.Min(float64(rh.NumRqsts), float64(api.MaxRqsts))))
 	epRunSummary := make(map[string]*EndpointDetail)
 	runSummary := RunSummary{RqstStats: RqstStats{MaxRqstDuration: time.Duration(-1), MinRqstDuration: time.Duration(math.MaxInt64)}}
 	runResults := RunResults{RunSummary: runSummary}
@@ -125,6 +138,7 @@ func (rh *ResponseHandler) Start() {
 
 	start := time.Now()
 	var totalRunTime time.Duration
+	responses := make([]Response, 0, 10)
 
 	for {
 		select {
@@ -132,35 +146,68 @@ func (rh *ResponseHandler) Start() {
 			if !ok {
 				defer close(rh.DoneC)
 				log.Debug().Msg("ResponseHandler: Summarizing results and exiting")
+
+				for _, r := range responses {
+					rh.accumulateResponseStats(r, &totalRunTime, &runResults, epRunSummary)
+					runResults.RunSummary.DNSLookup = append(runResults.RunSummary.DNSLookup, r.DNSLookupDuration)
+					runResults.RunSummary.TCPConnSetup = append(runResults.RunSummary.TCPConnSetup, r.TCPConnDuration)
+					runResults.RunSummary.RqstRoundTrip = append(runResults.RunSummary.RqstRoundTrip, r.RoundTripDuration)
+					runResults.RunSummary.TLSHandshake = append(runResults.RunSummary.TLSHandshake, r.TLSHandshakeDuration)
+				}
+
 				err := rh.finalizeResponseStats(start, &totalRunTime, &runResults, epRunSummary)
 				if err != nil {
 					log.Error().Err(err)
 					return
 				}
 
+				fmt.Println("")
+				printRunSummary(runResults.RunSummary)
+
+				fmt.Println("")
+				printRqstSummary(rh)
+
 				min, max := rh.generateHistogram(&runResults)
+				fmt.Printf("\nRequest Duration Histogram (seconds):\n")
+				fmt.Println(rh.generateHistogramString(min, max))
 
-				rsjson, err := json.MarshalIndent(runResults, "    ", "  ")
-				if err != nil {
-					log.Error().Err(err).Msgf("error marshaling RunSummary into string: %+v.\n", runResults)
-					return
+				fmt.Println("")
+				printNetworkSummary(runResults.RunSummary)
+				fmt.Println("")
+
+				// if max != 0 {
+				// 	fmt.Printf("\nResponse Time Histogram (seconds):\n")
+				// 	fmt.Println(rh.generateHistogramString(min, max))
+				// } else {
+				// 	fmt.Println("\nUnable to generate Response Time Histogram.")
+				// 	log.Error().Msg("'max' histogram bin value was 0, no histogram can be created")
+				// }
+
+				// fmt.Println("\n\nHTTP Trace Results (microsecs):")
+				// fmt.Printf("\tDNS Lookup:        Min: %d Median: %d P90: %d P99:%d\n",
+				// 	calcPMin(dnsResults), calcPMedian(dnsResults), calcP90(dnsResults), calcP99(dnsResults))
+				// fmt.Printf("\tTCP Conn:          Min: %d Median: %d P90: %d P99:%d\n",
+				// 	calcPMin(tcpResults), calcPMedian(tcpResults), calcP90(tcpResults), calcP99(tcpResults))
+				// fmt.Printf("\tRoundTrip:         Min: %d Median: %d P90: %d P99:%d\n",
+				// 	calcPMin(roundTripResults), calcPMedian(roundTripResults), calcP90(roundTripResults), calcP99(roundTripResults))
+				// fmt.Printf("\tTLS Handshake:    Min: %d Median: %d P90: %d P99:%d\n",
+				// 	calcPMin(TLSHandshakeResults), calcPMedian(TLSHandshakeResults), calcP90(TLSHandshakeResults), calcP99(TLSHandshakeResults))
+
+				if rh.ReportDetail == Long {
+					rsjson, err := json.MarshalIndent(runResults, "    ", "  ")
+					if err != nil {
+						log.Error().Err(err).Msgf("error marshaling RunSummary into string: %+v.\n", runResults)
+						return
+					}
+
+					fmt.Printf("\n\nRun Results:\n")
+					fmt.Printf("%s\n", string(rsjson[2:len(rsjson)-1]))
 				}
 
-				if max != 0 {
-					fmt.Printf("\nResponse Time Histogram (seconds):\n")
-					fmt.Println(rh.generateHistogramString(min, max))
-				} else {
-					fmt.Println("\nUnable to generate Response Time Histogram.")
-					log.Error().Msg("'max' histogram bin value was 0, no histogram can be created")
-				}
-
-				fmt.Printf("\n\nRun Results:\n")
-				fmt.Printf("%s\n", string(rsjson[2:len(rsjson)-1]))
 				return
 			}
 
-			rh.accumulateResponseStats(resp, &totalRunTime, &runResults, epRunSummary)
-
+			responses = append(responses, resp)
 		}
 	}
 }
@@ -203,7 +250,7 @@ func (rh *ResponseHandler) finalizeResponseStats(start time.Time, totalRunTime *
 }
 
 func (rh *ResponseHandler) accumulateResponseStats(resp Response, totalRunTime *time.Duration, runResults *RunResults, epRunSummary map[string]*EndpointDetail) {
-	rh.timingResults = append(rh.timingResults, resp.RequestDuration)
+	rh.TimingResults = append(rh.TimingResults, resp.RequestDuration)
 	runResults.RunSummary.RqstStats.TotalRqsts++
 	runResults.RunSummary.RqstStats.TotalRequestDuration += resp.RequestDuration
 	*totalRunTime = *totalRunTime + resp.RequestDuration
@@ -267,7 +314,7 @@ func (rh *ResponseHandler) accumulateResponseStats(resp Response, totalRunTime *
 // of that number. It returns the min and max values for the histogram, i.e., the
 // min and max number of observations in the histogram.
 func (rh *ResponseHandler) generateHistogram(runResults *RunResults) (minBinCount, maxBinCount int) {
-	numBins := calcNumBinsSturgesMethod(len(rh.timingResults))
+	numBins := calcNumBinsSturgesMethod(len(rh.TimingResults))
 	// numBins := calcNumBinsRiceMethod(len(rh.timingResults))
 	runResults.RunSummary.RqstStats.NormalizedMaxRqstDuration = time.Duration(rh.NormFactor) * runResults.RunSummary.RqstStats.MinRqstDuration
 	runResults.RunSummary.RqstStats.NormalizedMaxRqstDurationStr = runResults.RunSummary.RqstStats.NormalizedMaxRqstDuration.String()
@@ -292,7 +339,7 @@ func (rh *ResponseHandler) generateHistogram(runResults *RunResults) (minBinCoun
 	// that the observation gets assigned to the correct bin, i.e., the lowest bin value that is
 	// >= to the observation. 'binValues' is a slice whose values are appended in ascending order,
 	// so it is already sorted.
-	for _, observation := range rh.timingResults {
+	for _, observation := range rh.TimingResults {
 		// TODO: Might be able to get this to O(n*Log(n))) if did a binary search on binKeys as it's sorted
 		for _, binVal := range binValues {
 			if float64(observation) <= binVal {
@@ -317,7 +364,7 @@ func (rh *ResponseHandler) generateHistogram(runResults *RunResults) (minBinCoun
 		// MaxRqstDuration.
 		largestBinKey := binWidth * float64(numBins)
 		var tailBinCount int
-		for _, observation := range rh.timingResults {
+		for _, observation := range rh.TimingResults {
 			if float64(observation) > largestBinKey {
 				tailBinCount++
 			}
@@ -330,33 +377,13 @@ func (rh *ResponseHandler) generateHistogram(runResults *RunResults) (minBinCoun
 	return minBinCount, maxBinCount
 }
 
-func (rh *ResponseHandler) printHistogram(min, max int) {
-	barUnit := ">"
-	// barUnit := "■"
-
-	keys := make([]float64, 0, len(rh.histogram))
-	for k := range rh.histogram {
-		keys = append(keys, k)
-	}
-	sort.Float64s(keys)
-
-	fmt.Printf("\tLatency\t\tNumber of Observations\n")
-	fmt.Printf("\t-------\t\t----------------------\n")
-	var sb strings.Builder
-	for _, key := range keys {
-		cnt := rh.histogram[key]
-		barLen := ((cnt * 100) + (max / 2)) / max
-		for i := 0; i < barLen; i++ {
-			sb.WriteString(barUnit)
-		}
-		fmt.Printf("\t[%6.3f]\t%7v\t%s\n", key/float64(time.Second), cnt, sb.String())
-		sb.Reset()
-	}
-}
-
 func (rh *ResponseHandler) generateHistogramString(min, max int) string {
-	barUnit := ">"
+	// barUnit := ">"
+	barUnit := "❱"
 	// barUnit := "■"
+	// barUnit := "➤"
+	// barUnit := "⭆"
+	// barUnit := '➯'
 
 	keys := make([]float64, 0, len(rh.histogram))
 	for k := range rh.histogram {
@@ -365,8 +392,8 @@ func (rh *ResponseHandler) generateHistogramString(min, max int) string {
 	sort.Float64s(keys)
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("\tLatency\t\tNumber of Observations\n"))
-	sb.WriteString(fmt.Sprintf("\t-------\t\t----------------------\n"))
+	sb.WriteString(fmt.Sprintf("\tLatency   Number of Observations\n"))
+	sb.WriteString(fmt.Sprintf("\t--------  ----------------------\n"))
 	for _, key := range keys {
 		var sbBar strings.Builder
 		cnt := rh.histogram[key]
@@ -374,7 +401,7 @@ func (rh *ResponseHandler) generateHistogramString(min, max int) string {
 		for i := 0; i < barLen; i++ {
 			sbBar.WriteString(barUnit)
 		}
-		sb.WriteString(fmt.Sprintf("\t[%6.3f]\t%7v\t%s\n", key/float64(time.Second), cnt, sbBar.String()))
+		sb.WriteString(fmt.Sprintf("\t[%6.3f]   %7v\t%s\n", key/float64(time.Second), cnt, sbBar.String()))
 		sbBar.Reset()
 	}
 	return sb.String()

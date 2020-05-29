@@ -144,7 +144,7 @@ func validateConfig(concurrency int, rate int, runDur time.Duration, numRqsts in
 	if runDur < 1 && len(eps) > numRqsts {
 		return fmt.Errorf("there are more endpoints, %d, than requests, %d", len(eps), numRqsts)
 	}
-	if concurrency%len(eps) != 0 {
+	if concurrency < len(eps) {
 		return fmt.Errorf("MaxConcurrentRqsts must be greater than the number of endpoints. MaxConcurrentRqsts is %d and there are %d endpoints", concurrency, len(eps))
 	}
 

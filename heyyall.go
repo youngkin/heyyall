@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"runtime/pprof"
 	"syscall"
 	"time"
 
@@ -53,8 +54,18 @@ Options:
 	normalizationFactor := flag.Int("nf", 0, "normalization factor used to compress the output histogram by eliminating long tails. If provided, the value must be at least 10. The default is 0 which signifies no normalization will be done")
 	cpus := flag.Int("cpus", 0, "number of CPUs to use for the test run. Default is 0 which specifies all CPUs are to be used.")
 	help := flag.Bool("help", false, "help will emit detailed usage instructions and exit")
+	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to file")
 
 	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal().Err(err).Msg("unable to create cpuprofile file")
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	if *help {
 		fmt.Println(usage)
@@ -106,8 +117,6 @@ Options:
 		NormFactor:   *normalizationFactor,
 	}
 	go responseHandler.Start()
-	// Give responseHandler a bit of time to start
-	time.Sleep(time.Millisecond * 20)
 
 	var cert tls.Certificate
 	if config.CertFile != "" && config.KeyFile != "" {

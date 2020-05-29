@@ -26,9 +26,13 @@ const (
 // Response contains information describing the results
 // of a request to a specific endpoint
 type Response struct {
-	HTTPStatus      int
-	Endpoint        api.Endpoint
-	RequestDuration time.Duration
+	HTTPStatus           int
+	Endpoint             api.Endpoint
+	RequestDuration      time.Duration
+	DNSLookupDuration    time.Duration
+	TCPConnDuration      time.Duration
+	RoundTripDuration    time.Duration
+	TLSHandshakeDuration time.Duration
 }
 
 // Request contains the information needed to execute a request
