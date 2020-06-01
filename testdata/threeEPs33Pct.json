@@ -1,29 +1,36 @@
 {
     "RqstRate": 1000,
-    "MaxConcurrentRqsts": 3,
+    "MaxConcurrentRqsts": 200,
     "RunDuration": "0s",
-    "NumRequests": 1000,
+    "NumRequests": 2000,
     "OutputType": "JSON",
     "Endpoints": [
         {
             "URL": "http://accountd.kube/users",
             "Method": "GET",
             "RqstBody": "",
-            "RqstPercent": 33,
+            "RqstPercent": 13,
             "NumRequests": 2
         },
         {
             "URL": "http://accountd.kube/users/1",
             "Method": "GET",
             "RqstBody": "",
-            "RqstPercent": 33,
+            "RqstPercent": 12,
             "NumRequests": 2
         },
         {
-            "URL": "http://accountd.kube/users/2",
+            "URL": "http://accountd.kube/users/2000",
             "Method": "GET",
             "RqstBody": "",
-            "RqstPercent": 34,
+            "RqstPercent": 25,
+            "NumRequests": 2
+        },
+        {
+            "URL": "http://accountd.kube/users/2000",
+            "Method": "DELETE",
+            "RqstBody": "",
+            "RqstPercent": 50,
             "NumRequests": 2
         }
     ]

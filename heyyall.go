@@ -31,7 +31,7 @@ Usage: heyyall -config <ConfigFileLocation> [flags...]
 
 Options:
   -loglevel  Logging level. Default is 'WARN' (2). 0 is DEBUG, 1 INFO, up to 4 FATAL
-  -detail    Detail level of output report, 'short' or 'long'. Default is 'long'
+  -out       Type of output report, 'text' or 'json'. Default is 'text'
   -nf        Normalization factor used to compress the output histogram by eliminating long tails. 
              Lower values provide a finer grained view of the data at the expense of dropping data
              associated with the tail of the latency distribution. The latter is partly mitigated by 
@@ -50,7 +50,7 @@ Options:
 
 	configFile := flag.String("config", "", "path and filename containing the runtime configuration")
 	logLevel := flag.Int("loglevel", int(zerolog.WarnLevel), "log level, 0 for debug, 1 info, 2 warn, ...")
-	reportDetailFlag := flag.String("detail", "long", "what level of report detail is desired, 'short' or 'long'")
+	outputType := flag.String("out", "text", "what type of report is desired, 'text' or 'json'")
 	normalizationFactor := flag.Int("nf", 0, "normalization factor used to compress the output histogram by eliminating long tails. If provided, the value must be at least 10. The default is 0 which signifies no normalization will be done")
 	cpus := flag.Int("cpus", 0, "number of CPUs to use for the test run. Default is 0 which specifies all CPUs are to be used.")
 	help := flag.Bool("help", false, "help will emit detailed usage instructions and exit")
@@ -105,16 +105,16 @@ Options:
 	responseC := make(chan internal.Response, config.MaxConcurrentRqsts)
 	doneC := make(chan struct{})
 
-	var reportDetail internal.ReportDetail = internal.Long
-	if *reportDetailFlag == "short" {
-		reportDetail = internal.Short
+	var reportDetail internal.OutputType = internal.JSON
+	if *outputType == "text" {
+		reportDetail = internal.Text
 	}
 	responseHandler := &internal.ResponseHandler{
-		ReportDetail: reportDetail,
-		ResponseC:    responseC,
-		DoneC:        doneC,
-		NumRqsts:     config.NumRequests,
-		NormFactor:   *normalizationFactor,
+		OutputType: reportDetail,
+		ResponseC:  responseC,
+		DoneC:      doneC,
+		NumRqsts:   config.NumRequests,
+		NormFactor: *normalizationFactor,
 	}
 	go responseHandler.Start()
 

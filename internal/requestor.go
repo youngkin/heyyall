@@ -47,24 +47,25 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Durati
 		return
 	}
 
-	var dnsStart, dnsDone, connDone, gotResp, tlsStart, tlsDone time.Time
+	var dnsStart, dnsDone, connStart, connDone, gotResp, tlsStart, tlsDone time.Time
 
 	trace := &httptrace.ClientTrace{
 		DNSStart: func(_ httptrace.DNSStartInfo) { dnsStart = time.Now() },
 		DNSDone:  func(_ httptrace.DNSDoneInfo) { dnsDone = time.Now() },
-		ConnectStart: func(_, _ string) {
-			if dnsDone.IsZero() {
-				// connecting directly to IP
-				dnsDone = time.Now()
-			}
-		},
-		ConnectDone: func(net, addr string, err error) {
-			if err != nil {
-				log.Fatal().Msgf("unable to connect to host %v: %v", addr, err)
-			}
-			connDone = time.Now()
+		// ConnectStart: func(_, _ string) {
+		// 	if dnsDone.IsZero() {
+		// 		// connecting directly to IP
+		// 		dnsDone = time.Now()
+		// 	}
+		// },
+		// ConnectDone: func(net, addr string, err error) {
+		// 	if err != nil {
+		// 		log.Fatal().Msgf("unable to connect to host %v: %v", addr, err)
+		// 	}
+		// 	connDone = time.Now()
 
-		},
+		// },
+		GetConn:              func(_ string) { connStart = time.Now() },
 		GotConn:              func(_ httptrace.GotConnInfo) { connDone = time.Now() },
 		GotFirstResponseByte: func() { gotResp = time.Now() },
 		TLSHandshakeStart:    func() { tlsStart = time.Now() },
@@ -135,7 +136,7 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Durati
 			Endpoint:             api.Endpoint{URL: ep.URL, Method: ep.Method},
 			RequestDuration:      time.Since(start),
 			DNSLookupDuration:    dnsDone.Sub(dnsStart),
-			TCPConnDuration:      connDone.Sub(dnsDone),
+			TCPConnDuration:      connDone.Sub(connStart),
 			RoundTripDuration:    gotResp.Sub(connDone),
 			TLSHandshakeDuration: tlsDone.Sub(tlsStart),
 		}:

@@ -2,7 +2,7 @@
     "RqstRate": 0,
     "MaxConcurrentRqsts": 2,
     "RunDuration": "0s",
-    "NumRequests": 2,
+    "NumRequests": 10,
     "CertFile": "/Users/rich_youngkin/certs/fullchain.pem",
     "KeyFile": "/Users/rich_youngkin/certs/privkey.pem",
     "Endpoints": [
@@ -19,7 +19,7 @@
             "RqstPercent": 50,
             "CertFile": "/Users/rich_youngkin/Software/repos/heyyall/internal/testserver/cert/public.crt",
             "KeyFile": "/Users/rich_youngkin/Software/repos/heyyall/internal/testserver/cert/private.key"
-               }
+        }
     ]
 
 }
