@@ -17,8 +17,8 @@
             "Method": "GET",
             "RqstBody": "",
             "RqstPercent": 50,
-            "CertFile": "/Users/rich_youngkin/Software/repos/heyyall/internal/testserver/cert/public.crt",
-            "KeyFile": "/Users/rich_youngkin/Software/repos/heyyall/internal/testserver/cert/private.key"
+            "CertFile": "/Users/rich_youngkin/certs/fullchain.pem",
+            "KeyFile": "/Users/rich_youngkin/certs/privkey.pem"
         }
     ]
 
