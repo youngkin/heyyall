@@ -91,18 +91,18 @@ func TestResponseStats(t *testing.T) {
 	url1 := "http://someurl/1"
 	url2 := "http://someurl/2"
 	url3 := "http://someurl/3"
-	runResults := RunResults{
-		RunSummary: RunSummary{
-			RqstStats: RqstStats{
-				MinRqstDuration: math.MaxInt64,
-				MaxRqstDuration: 0,
+	runResults := api.RunResults{
+		RunSummary: api.RunSummary{
+			RqstStats: api.RqstStats{
+				MinRqstDurationNanos: math.MaxInt64,
+				MaxRqstDurationNanos: 0,
 			},
 		},
 		EndpointSummary: make(map[string]map[string]int),
 	}
-	epRunSummary := make(map[string]*EndpointDetail)
+	epRunSummary := make(map[string]*api.EndpointDetail)
 
-	rh := ResponseHandler{ReportDetail: Long}
+	rh := ResponseHandler{OutputType: JSON}
 
 	// URL1
 	resp := Response{
@@ -207,7 +207,7 @@ func TestResponseStats(t *testing.T) {
 	}
 
 	expected := readGoldenFile(t, testName)
-	expectedJSON := RunResults{}
+	expectedJSON := api.RunResults{}
 	err = json.Unmarshal(expected, &expectedJSON)
 	if err != nil {
 		t.Errorf("error unmarshaling GoldenFile %s into RunSummary, Error: %s\n", expected, err)
@@ -220,7 +220,7 @@ func TestResponseStats(t *testing.T) {
 		t.Errorf("expected %d endpoints, got %d", len(expectedJSON.EndpointSummary), len(runResults.EndpointSummary))
 	}
 
-	if expectedJSON.RunSummary.RqstStats != runResults.RunSummary.RqstStats {
+	if !compareRqstStats(expectedJSON.RunSummary.RqstStats, runResults.RunSummary.RqstStats) {
 		t.Errorf("expected %+v, got %+v", expectedJSON.RunSummary.RqstStats, runResults.RunSummary.RqstStats)
 	}
 
@@ -255,19 +255,23 @@ func TestResponseStats(t *testing.T) {
 			runResults.EndpointSummary[url3][http.MethodDelete])
 	}
 
-	if *expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodGet] != *runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodGet] {
+	if !compareRqstStats(*expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodGet],
+		*runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodGet]) {
 		t.Errorf("expected %+v for %s method %s, got %+v", expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodGet], url3,
 			http.MethodGet, runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodGet])
 	}
-	if *expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPut] != *runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPut] {
+	if !compareRqstStats(*expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPut],
+		*runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPut]) {
 		t.Errorf("expected %+v for %s method %s, got %+v", expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPut], url3,
 			http.MethodPut, runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPut])
 	}
-	if *expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPost] != *runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPost] {
+	if !compareRqstStats(*expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPost],
+		*runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPost]) {
 		t.Errorf("expected %+v for %s method %s, got %+v", expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPost], url3,
 			http.MethodPost, runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodPost])
 	}
-	if *expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodDelete] != *runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodDelete] {
+	if !compareRqstStats(*expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodDelete],
+		*runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodDelete]) {
 		t.Errorf("expected %+v for %s method %s, got %+v", expectedJSON.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodDelete], url3,
 			http.MethodDelete, runResults.EndpointDetails[url3].HTTPMethodRqstStats[http.MethodDelete])
 	}
@@ -284,7 +288,7 @@ func TestGenHistogramSturges(t *testing.T) {
 		expectedMinBinVal int
 		expectedHist      map[float64]int
 		respHandler       *ResponseHandler
-		runResults        RunResults
+		runResults        api.RunResults
 	}{
 		{
 			name:              "No observations, nf = 0",
@@ -292,10 +296,9 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: math.MaxInt32,
 			expectedHist:      map[float64]int{},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{},
-				NormFactor:    0,
+				NormFactor: 0,
 			},
-			runResults: RunResults{},
+			runResults: api.RunResults{},
 		},
 		{
 			name:              "Observations: 1; nf = 0",
@@ -303,14 +306,14 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 1,
 			expectedHist:      map[float64]int{1: 1},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 1},
-				NormFactor:    0,
+				NormFactor: 0,
 			},
-			runResults: RunResults{
-				RunSummary: RunSummary{
-					RqstStats: RqstStats{
-						MinRqstDuration: time.Nanosecond * 1,
-						MaxRqstDuration: time.Nanosecond * 1,
+			runResults: api.RunResults{
+				RunSummary: api.RunSummary{
+					RqstStats: api.RqstStats{
+						MinRqstDurationNanos: time.Nanosecond * 1,
+						MaxRqstDurationNanos: time.Nanosecond * 1,
+						TimingResultsNanos:   []time.Duration{time.Nanosecond * 1},
 					},
 				},
 			},
@@ -321,14 +324,14 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 0,
 			expectedHist:      map[float64]int{2: 0, 4: 2},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 3, time.Nanosecond * 4},
-				NormFactor:    0,
+				NormFactor: 0,
 			},
-			runResults: RunResults{
-				RunSummary: RunSummary{
-					RqstStats: RqstStats{
-						MinRqstDuration: time.Nanosecond * 3,
-						MaxRqstDuration: time.Nanosecond * 4,
+			runResults: api.RunResults{
+				RunSummary: api.RunSummary{
+					RqstStats: api.RqstStats{
+						MinRqstDurationNanos: time.Nanosecond * 3,
+						MaxRqstDurationNanos: time.Nanosecond * 4,
+						TimingResultsNanos:   []time.Duration{time.Nanosecond * 3, time.Nanosecond * 4},
 					},
 				},
 			},
@@ -339,14 +342,14 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 1,
 			expectedHist:      map[float64]int{2: 1, 4: 1},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 2, time.Nanosecond * 4},
-				NormFactor:    0,
+				NormFactor: 0,
 			},
-			runResults: RunResults{
-				RunSummary: RunSummary{
-					RqstStats: RqstStats{
-						MinRqstDuration: time.Nanosecond * 2,
-						MaxRqstDuration: time.Nanosecond * 4,
+			runResults: api.RunResults{
+				RunSummary: api.RunSummary{
+					RqstStats: api.RqstStats{
+						MinRqstDurationNanos: time.Nanosecond * 2,
+						MaxRqstDurationNanos: time.Nanosecond * 4,
+						TimingResultsNanos:   []time.Duration{time.Nanosecond * 2, time.Nanosecond * 4},
 					},
 				},
 			},
@@ -357,14 +360,14 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 1,
 			expectedHist:      map[float64]int{1.3333333333333333: 1, 2.6666666666666665: 1, 4: 2},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
-				NormFactor:    0,
+				NormFactor: 0,
 			},
-			runResults: RunResults{
-				RunSummary: RunSummary{
-					RqstStats: RqstStats{
-						MinRqstDuration: time.Nanosecond * 1,
-						MaxRqstDuration: time.Nanosecond * 4,
+			runResults: api.RunResults{
+				RunSummary: api.RunSummary{
+					RqstStats: api.RqstStats{
+						MinRqstDurationNanos: time.Nanosecond * 1,
+						MaxRqstDurationNanos: time.Nanosecond * 4,
+						TimingResultsNanos:   []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
 					},
 				},
 			},
@@ -377,14 +380,14 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 1,
 			expectedHist:      map[float64]int{1: 1, 2: 1, 3: 1, 4: 1},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
-				NormFactor:    3,
+				NormFactor: 3,
 			},
-			runResults: RunResults{
-				RunSummary: RunSummary{
-					RqstStats: RqstStats{
-						MinRqstDuration: time.Nanosecond * 1,
-						MaxRqstDuration: time.Nanosecond * 4,
+			runResults: api.RunResults{
+				RunSummary: api.RunSummary{
+					RqstStats: api.RqstStats{
+						MinRqstDurationNanos: time.Nanosecond * 1,
+						MaxRqstDurationNanos: time.Nanosecond * 4,
+						TimingResultsNanos:   []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
 					},
 				},
 			},
@@ -399,14 +402,14 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 1,
 			expectedHist:      map[float64]int{1.3333333333333333: 1, 2.6666666666666665: 1, 4: 2},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
-				NormFactor:    10,
+				NormFactor: 10,
 			},
-			runResults: RunResults{
-				RunSummary: RunSummary{
-					RqstStats: RqstStats{
-						MinRqstDuration: time.Nanosecond * 1,
-						MaxRqstDuration: time.Nanosecond * 4,
+			runResults: api.RunResults{
+				RunSummary: api.RunSummary{
+					RqstStats: api.RqstStats{
+						MinRqstDurationNanos: time.Nanosecond * 1,
+						MaxRqstDurationNanos: time.Nanosecond * 4,
+						TimingResultsNanos:   []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 4},
 					},
 				},
 			},
@@ -418,15 +421,16 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 0,
 			expectedHist:      map[float64]int{50: 6, 100: 1, 150: 0, 200: 1},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 2, time.Nanosecond * 2,
-					time.Nanosecond * 3, time.Nanosecond * 10, time.Nanosecond * 100, time.Nanosecond * 200},
 				NormFactor: 0,
 			},
-			runResults: RunResults{
-				RunSummary: RunSummary{
-					RqstStats: RqstStats{
-						MinRqstDuration: time.Nanosecond * 1,
-						MaxRqstDuration: time.Nanosecond * 200,
+			runResults: api.RunResults{
+				RunSummary: api.RunSummary{
+					RqstStats: api.RqstStats{
+						MinRqstDurationNanos: time.Nanosecond * 1,
+						MaxRqstDurationNanos: time.Nanosecond * 200,
+						TimingResultsNanos: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2,
+							time.Nanosecond * 2, time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 10,
+							time.Nanosecond * 100, time.Nanosecond * 200},
 					},
 				},
 			},
@@ -438,15 +442,16 @@ func TestGenHistogramSturges(t *testing.T) {
 			expectedMinBinVal: 0,
 			expectedHist:      map[float64]int{0.5: 0, 1: 1, 1.5: 0, 2: 3, 200: 4},
 			respHandler: &ResponseHandler{
-				timingResults: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 2, time.Nanosecond * 2,
-					time.Nanosecond * 3, time.Nanosecond * 10, time.Nanosecond * 100, time.Nanosecond * 200},
 				NormFactor: 2,
 			},
-			runResults: RunResults{
-				RunSummary: RunSummary{
-					RqstStats: RqstStats{
-						MinRqstDuration: time.Nanosecond * 1,
-						MaxRqstDuration: time.Nanosecond * 200,
+			runResults: api.RunResults{
+				RunSummary: api.RunSummary{
+					RqstStats: api.RqstStats{
+						MinRqstDurationNanos: time.Nanosecond * 1,
+						MaxRqstDurationNanos: time.Nanosecond * 200,
+						TimingResultsNanos: []time.Duration{time.Nanosecond * 1, time.Nanosecond * 2, time.Nanosecond * 2,
+							time.Nanosecond * 2, time.Nanosecond * 3, time.Nanosecond * 10, time.Nanosecond * 100,
+							time.Nanosecond * 200},
 					},
 				},
 			},
@@ -539,4 +544,26 @@ func generateNormalDistribution(mean float64, stdDev int) float64 {
 	// 	x = x * -1
 	// }
 	// return x
+}
+
+func compareRqstStats(x, y api.RqstStats) bool {
+	if len(x.TimingResultsNanos) != len(y.TimingResultsNanos) {
+		return false
+	}
+	for i := 0; i < len(x.TimingResultsNanos); i++ {
+		if x.TimingResultsNanos[i] != y.TimingResultsNanos[i] {
+			return false
+		}
+	}
+
+	if x.AvgRqstDurationNanos == y.AvgRqstDurationNanos &&
+		x.MaxRqstDurationNanos == y.MaxRqstDurationNanos &&
+		x.MinRqstDurationNanos == y.MinRqstDurationNanos &&
+		x.NormalizedMaxRqstDurationNanos == y.NormalizedMaxRqstDurationNanos &&
+		x.TotalRequestDurationNanos == y.TotalRequestDurationNanos &&
+		x.TotalRqsts == y.TotalRqsts {
+		return true
+	}
+
+	return false
 }

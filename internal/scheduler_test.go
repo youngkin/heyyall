@@ -408,11 +408,11 @@ func TestValidation(t *testing.T) {
 			shouldFail: false,
 		},
 		{
-			name:        "FailPath - concurrency must be a multiple of len(eps) - otherwise some concurrency is lost",
+			name:        "FailPath - concurrency must be >= len(eps) - otherwise some concurrency is lost",
 			rqstRate:    goFastRate,
 			runDur:      "0s",
 			numRqsts:    99,
-			concurrency: 99,
+			concurrency: 1,
 			eps: []api.Endpoint{
 				{
 					URL:         url1,

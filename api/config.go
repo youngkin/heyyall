@@ -69,10 +69,6 @@ type LoadTestConfig struct {
 	// both RunDuration and NumRequests is an error. See RunDuration
 	// above for a bit more info.
 	NumRequests int
-	// OutputType specifies if the output will be written in JSON or
-	// CSV format. Acceptable values are "JSON" and "CSV". If not
-	// specified output will be in JSON format.
-	OutputType string
 	// KeyFile is the name of a file, in PEM format, that contains an SSL private
 	//  key. It will only be used if it has a non-empty value. It can be overridden
 	// at the Endpoint level.

@@ -1,21 +1,33 @@
 {
     "RunSummary": {
-        "RqstRatePerSec": 8594.350933131653,
-        "RunDuration": 1396266,
-        "RunDurationStr": "1.396266ms",
+        "RqstRatePerSec": 11098.358275352119,
+        "RunDurationNanos": 1081241,
         "RqstStats": {
+            "TimingResultsNanos": [
+                100000000,
+                1000000000,
+                500000000,
+                250000000,
+                250000000,
+                250000000,
+                750000000,
+                250000000,
+                750000000,
+                1250000000,
+                1750000000,
+                900000000
+            ],
             "TotalRqsts": 12,
-            "TotalRequestDurationStr": "8s",
-            "MaxRqstDurationStr": "1.75s",
-            "NormalizedMaxRqstDurationStr": "",
-            "MinRqstDurationStr": "100ms",
-            "AvgRqstDurationStr": "666.666666ms",
-            "TotalRequestDuration": 8000000000,
-            "MaxRqstDuration": 1750000000,
-            "NormalizedMaxRqstDuration": 0,
-            "MinRqstDuration": 100000000,
-            "AvgRqstDuration": 666666666
-        }
+            "TotalRequestDurationNanos": 8000000000,
+            "MaxRqstDurationNanos": 1750000000,
+            "NormalizedMaxRqstDurationNanos": 0,
+            "MinRqstDurationNanos": 100000000,
+            "AvgRqstDurationNanos": 666666666
+        },
+        "DNSLookupNanos": null,
+        "TCPConnSetupNanos": null,
+        "RqstRoundTripNanos": null,
+        "TLSHandshakeNanos": null
     },
     "EndpointSummary": {
         "http://someurl/1": {
@@ -45,30 +57,27 @@
             },
             "HTTPMethodRqstStats": {
                 "GET": {
+                    "TimingResultsNanos": [
+                        100000000
+                    ],
                     "TotalRqsts": 1,
-                    "TotalRequestDurationStr": "100ms",
-                    "MaxRqstDurationStr": "100ms",
-                    "NormalizedMaxRqstDurationStr": "",
-                    "MinRqstDurationStr": "100ms",
-                    "AvgRqstDurationStr": "100ms",
-                    "TotalRequestDuration": 100000000,
-                    "MaxRqstDuration": 100000000,
-                    "NormalizedMaxRqstDuration": 0,
-                    "MinRqstDuration": 100000000,
-                    "AvgRqstDuration": 100000000
+                    "TotalRequestDurationNanos": 100000000,
+                    "MaxRqstDurationNanos": 100000000,
+                    "NormalizedMaxRqstDurationNanos": 0,
+                    "MinRqstDurationNanos": 100000000,
+                    "AvgRqstDurationNanos": 100000000
                 },
                 "PUT": {
+                    "TimingResultsNanos": [
+                        1000000000,
+                        500000000
+                    ],
                     "TotalRqsts": 2,
-                    "TotalRequestDurationStr": "1.5s",
-                    "MaxRqstDurationStr": "1s",
-                    "NormalizedMaxRqstDurationStr": "",
-                    "MinRqstDurationStr": "500ms",
-                    "AvgRqstDurationStr": "750ms",
-                    "TotalRequestDuration": 1500000000,
-                    "MaxRqstDuration": 1000000000,
-                    "NormalizedMaxRqstDuration": 0,
-                    "MinRqstDuration": 500000000,
-                    "AvgRqstDuration": 750000000
+                    "TotalRequestDurationNanos": 1500000000,
+                    "MaxRqstDurationNanos": 1000000000,
+                    "NormalizedMaxRqstDurationNanos": 0,
+                    "MinRqstDurationNanos": 500000000,
+                    "AvgRqstDurationNanos": 750000000
                 }
             }
         },
@@ -81,17 +90,15 @@
             },
             "HTTPMethodRqstStats": {
                 "POST": {
+                    "TimingResultsNanos": [
+                        250000000
+                    ],
                     "TotalRqsts": 1,
-                    "TotalRequestDurationStr": "250ms",
-                    "MaxRqstDurationStr": "250ms",
-                    "NormalizedMaxRqstDurationStr": "",
-                    "MinRqstDurationStr": "250ms",
-                    "AvgRqstDurationStr": "250ms",
-                    "TotalRequestDuration": 250000000,
-                    "MaxRqstDuration": 250000000,
-                    "NormalizedMaxRqstDuration": 0,
-                    "MinRqstDuration": 250000000,
-                    "AvgRqstDuration": 250000000
+                    "TotalRequestDurationNanos": 250000000,
+                    "MaxRqstDurationNanos": 250000000,
+                    "NormalizedMaxRqstDurationNanos": 0,
+                    "MinRqstDurationNanos": 250000000,
+                    "AvgRqstDurationNanos": 250000000
                 }
             }
         },
@@ -113,56 +120,52 @@
             },
             "HTTPMethodRqstStats": {
                 "DELETE": {
+                    "TimingResultsNanos": [
+                        900000000
+                    ],
                     "TotalRqsts": 1,
-                    "TotalRequestDurationStr": "900ms",
-                    "MaxRqstDurationStr": "900ms",
-                    "NormalizedMaxRqstDurationStr": "",
-                    "MinRqstDurationStr": "900ms",
-                    "AvgRqstDurationStr": "900ms",
-                    "TotalRequestDuration": 900000000,
-                    "MaxRqstDuration": 900000000,
-                    "NormalizedMaxRqstDuration": 0,
-                    "MinRqstDuration": 900000000,
-                    "AvgRqstDuration": 900000000
+                    "TotalRequestDurationNanos": 900000000,
+                    "MaxRqstDurationNanos": 900000000,
+                    "NormalizedMaxRqstDurationNanos": 0,
+                    "MinRqstDurationNanos": 900000000,
+                    "AvgRqstDurationNanos": 900000000
                 },
                 "GET": {
+                    "TimingResultsNanos": [
+                        250000000,
+                        750000000
+                    ],
                     "TotalRqsts": 2,
-                    "TotalRequestDurationStr": "1s",
-                    "MaxRqstDurationStr": "750ms",
-                    "NormalizedMaxRqstDurationStr": "",
-                    "MinRqstDurationStr": "250ms",
-                    "AvgRqstDurationStr": "500ms",
-                    "TotalRequestDuration": 1000000000,
-                    "MaxRqstDuration": 750000000,
-                    "NormalizedMaxRqstDuration": 0,
-                    "MinRqstDuration": 250000000,
-                    "AvgRqstDuration": 500000000
+                    "TotalRequestDurationNanos": 1000000000,
+                    "MaxRqstDurationNanos": 750000000,
+                    "NormalizedMaxRqstDurationNanos": 0,
+                    "MinRqstDurationNanos": 250000000,
+                    "AvgRqstDurationNanos": 500000000
                 },
                 "POST": {
+                    "TimingResultsNanos": [
+                        250000000
+                    ],
                     "TotalRqsts": 1,
-                    "TotalRequestDurationStr": "250ms",
-                    "MaxRqstDurationStr": "250ms",
-                    "NormalizedMaxRqstDurationStr": "",
-                    "MinRqstDurationStr": "250ms",
-                    "AvgRqstDurationStr": "250ms",
-                    "TotalRequestDuration": 250000000,
-                    "MaxRqstDuration": 250000000,
-                    "NormalizedMaxRqstDuration": 0,
-                    "MinRqstDuration": 250000000,
-                    "AvgRqstDuration": 250000000
+                    "TotalRequestDurationNanos": 250000000,
+                    "MaxRqstDurationNanos": 250000000,
+                    "NormalizedMaxRqstDurationNanos": 0,
+                    "MinRqstDurationNanos": 250000000,
+                    "AvgRqstDurationNanos": 250000000
                 },
                 "PUT": {
+                    "TimingResultsNanos": [
+                        250000000,
+                        750000000,
+                        1250000000,
+                        1750000000
+                    ],
                     "TotalRqsts": 4,
-                    "TotalRequestDurationStr": "4s",
-                    "MaxRqstDurationStr": "1.75s",
-                    "NormalizedMaxRqstDurationStr": "",
-                    "MinRqstDurationStr": "250ms",
-                    "AvgRqstDurationStr": "1s",
-                    "TotalRequestDuration": 4000000000,
-                    "MaxRqstDuration": 1750000000,
-                    "NormalizedMaxRqstDuration": 0,
-                    "MinRqstDuration": 250000000,
-                    "AvgRqstDuration": 1000000000
+                    "TotalRequestDurationNanos": 4000000000,
+                    "MaxRqstDurationNanos": 1750000000,
+                    "NormalizedMaxRqstDurationNanos": 0,
+                    "MinRqstDurationNanos": 250000000,
+                    "AvgRqstDurationNanos": 1000000000
                 }
             }
         }

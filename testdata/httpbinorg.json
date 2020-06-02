@@ -1,8 +1,8 @@
 {
     "RqstRate": 0,
-    "MaxConcurrentRqsts": 10,
+    "MaxConcurrentRqsts": 50,
     "RunDuration": "0s",
-    "NumRequests": 10,
+    "NumRequests": 1000,
     "Endpoints": [
         {
             "URL": "https://httpbin.org/anything",
