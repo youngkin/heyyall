@@ -50,21 +50,8 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Durati
 	var dnsStart, dnsDone, connStart, connDone, gotResp, tlsStart, tlsDone time.Time
 
 	trace := &httptrace.ClientTrace{
-		DNSStart: func(_ httptrace.DNSStartInfo) { dnsStart = time.Now() },
-		DNSDone:  func(_ httptrace.DNSDoneInfo) { dnsDone = time.Now() },
-		// ConnectStart: func(_, _ string) {
-		// 	if dnsDone.IsZero() {
-		// 		// connecting directly to IP
-		// 		dnsDone = time.Now()
-		// 	}
-		// },
-		// ConnectDone: func(net, addr string, err error) {
-		// 	if err != nil {
-		// 		log.Fatal().Msgf("unable to connect to host %v: %v", addr, err)
-		// 	}
-		// 	connDone = time.Now()
-
-		// },
+		DNSStart:             func(_ httptrace.DNSStartInfo) { dnsStart = time.Now() },
+		DNSDone:              func(_ httptrace.DNSDoneInfo) { dnsDone = time.Now() },
 		GetConn:              func(_ string) { connStart = time.Now() },
 		GotConn:              func(_ httptrace.GotConnInfo) { connDone = time.Now() },
 		GotFirstResponseByte: func() { gotResp = time.Now() },
@@ -78,8 +65,6 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Durati
 	// test in the for-loop below
 	if numRqsts == 0 {
 		log.Debug().Msgf("ProcessRqst: EP: %s, numRqsts %d was 0", ep.URL, numRqsts)
-		// TODO: Need to come back here and ensure that each EP goroutine can only
-		// run it's share of the api.MaxRqsts limit.
 		numRqsts = api.MaxRqsts
 	}
 	if runDur == time.Duration(0) {
@@ -121,8 +106,8 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Durati
 			defer resp.Body.Close()
 		}
 		if err != nil {
-			log.Warn().Err(err).Msgf("Requestor: error sending request")
-			return // TODO: Should return here? This assumes that the error is persistent
+			log.Warn().Err(err).Msgf("Requestor: error sending request. Dropping next %d requests.", numRqsts-1-1)
+			return
 		}
 		select {
 		case <-r.Ctx.Done():

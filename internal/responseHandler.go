@@ -95,8 +95,6 @@ func (rh *ResponseHandler) Start() {
 					return
 				}
 
-				// TODO: This needs to be uncommented to print JSON results. Also, reportDetail should probably
-				// TODO: change to reportType with values text or JSON
 				rsjson, err := json.MarshalIndent(runResults, "    ", "  ")
 				if err != nil {
 					log.Error().Err(err).Msgf("error marshaling RunSummary into string: %+v.\n", runResults)
