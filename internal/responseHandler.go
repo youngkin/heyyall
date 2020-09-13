@@ -33,7 +33,8 @@ type Response struct {
 type ResponseHandler struct {
 	OutputType OutputType
 	ResponseC  chan Response
-	DoneC      chan struct{}
+	ProgressC  chan interface{}
+	DoneC      chan interface{}
 	NumRqsts   int
 	NormFactor int
 	// histogram contains a count of observations that are <= to the value of the key.
@@ -106,6 +107,11 @@ func (rh *ResponseHandler) Start() {
 			}
 
 			responses = append(responses, resp)
+			// If rh.NumRqsts > 0 then the load test is being limited by total number of requests sent, not time.
+			// In this case each received request represents progress that must be recorded.
+			if rh.NumRqsts > 0 {
+				rh.ProgressC <- struct{}{}
+			}
 		}
 	}
 }

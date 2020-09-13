@@ -23,6 +23,9 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/youngkin/heyyall/api"
 	"github.com/youngkin/heyyall/internal"
+
+	"github.com/vbauerster/mpb/v5"
+	"github.com/vbauerster/mpb/v5/decor"
 )
 
 func main() {
@@ -101,9 +104,11 @@ Options:
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	responseC := make(chan internal.Response, config.MaxConcurrentRqsts)
-	doneC := make(chan struct{})
+	doneC := make(chan interface{})
+	progressC := make(chan interface{})
 
 	var reportDetail internal.OutputType = internal.JSON
 	if *outputType == "text" {
@@ -112,6 +117,7 @@ Options:
 	responseHandler := &internal.ResponseHandler{
 		OutputType: reportDetail,
 		ResponseC:  responseC,
+		ProgressC:  progressC,
 		DoneC:      doneC,
 		NumRqsts:   config.NumRequests,
 		NormFactor: *normalizationFactor,
@@ -147,9 +153,17 @@ Options:
 		config.NumRequests, config.Endpoints, rqstr)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Unexpected error configuring new Requestor")
-		cancel()
 		return
 	}
+
+	dur, err := time.ParseDuration(config.RunDuration)
+	if err != nil {
+		log.Fatal().Err(err).Msg(fmt.Sprintf("runDur: %s, must be of the form 'xs' or xm where 'x' is an integer and 's' indicates seconds and 'm' indicates minutes",
+			config.RunDuration))
+		return
+	}
+	go startProgressBar(progressC, doneC, dur, config.NumRequests)
+
 	go scheduler.Start()
 
 	sigs := make(chan os.Signal, 1)
@@ -159,7 +173,6 @@ Options:
 	case <-sigs:
 		signal.Stop(sigs)
 		log.Debug().Msg("heyyall: SIGTERM caught")
-		cancel()
 		<-doneC // Wait for graceful shutdown to complete
 	case <-doneC:
 	}
@@ -180,4 +193,55 @@ func getConfig(fileName string) (api.LoadTestConfig, error) {
 		return api.LoadTestConfig{}, fmt.Errorf("error unmarshaling test config bytes: %s", string(contents))
 	}
 	return config, nil
+}
+
+func startProgressBar(progressC chan interface{}, doneC chan interface{}, dur time.Duration, numRqsts int) {
+	progress := mpb.New(mpb.WithWidth(64))
+	var total int64
+	if int64(dur) > 0 {
+		total = int64(dur / time.Second)
+	} else {
+		total = int64(numRqsts)
+	}
+	// barName := ""
+	bar := progress.AddBar(total,
+		mpb.PrependDecorators(
+			// display our name with one space on the right
+			// decor.Name(barName, decor.WC{W: len(barName) + 1, C: decor.DidentRight}),
+			decor.OnComplete(decor.Name("Running", decor.WCSyncSpaceR), "Done!"),
+			// replace ETA decorator with "done" message, OnComplete event
+			// decor.OnComplete(
+			// 	decor.AverageETA(decor.ET_STYLE_GO, decor.WC{W: 4}), "done",
+			// ),
+		),
+		mpb.AppendDecorators(decor.Percentage()),
+	)
+
+	var tickerC <-chan time.Time
+	var ticker *time.Ticker
+	pC := progressC
+	if dur > 0 {
+		ticker = time.NewTicker(time.Second)
+		tickerC = ticker.C
+		pC = nil
+	}
+
+	fmt.Printf("\nBegin load test...\n\n")
+
+LOOP:
+	for {
+		select {
+		case <-doneC:
+			break LOOP
+		case <-tickerC:
+			bar.Increment()
+		case <-pC:
+			bar.Increment()
+		}
+	}
+
+	progress.Wait()
+	if ticker != nil {
+		ticker.Stop()
+	}
 }
