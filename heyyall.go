@@ -103,9 +103,6 @@ Options:
 		runtime.GOMAXPROCS(runtime.NumCPU())
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	responseC := make(chan internal.Response, config.MaxConcurrentRqsts)
 	doneC := make(chan interface{})
 	progressC := make(chan interface{})
@@ -141,7 +138,27 @@ Options:
 			Certificates: []tls.Certificate{cert},
 		},
 	}
-	client := http.Client{Transport: t, Timeout: time.Second * 15}
+	dur, err := time.ParseDuration(config.RunDuration)
+	if err != nil {
+		log.Fatal().Err(err).Msg(fmt.Sprintf("runDur: %s, must be of the form 'xs' or xm where 'x' is an integer and 's' indicates seconds and 'm' indicates minutes",
+			config.RunDuration))
+	}
+
+	var (
+		client http.Client
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
+
+	if int64(dur) > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), dur)
+		client = http.Client{Transport: t, Timeout: dur}
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+		// TODO: Make Client.Timeout configurable?
+		client = http.Client{Transport: t, Timeout: 15 * time.Second}
+	}
+	defer cancel()
 
 	rqstr := internal.Requestor{
 		Ctx:       ctx,
@@ -149,19 +166,13 @@ Options:
 		Client:    client,
 	}
 
-	scheduler, err := internal.NewScheduler(config.MaxConcurrentRqsts, config.RqstRate, config.RunDuration,
+	scheduler, err := internal.NewScheduler(config.MaxConcurrentRqsts, config.RqstRate, dur,
 		config.NumRequests, config.Endpoints, rqstr)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Unexpected error configuring new Requestor")
 		return
 	}
 
-	dur, err := time.ParseDuration(config.RunDuration)
-	if err != nil {
-		log.Fatal().Err(err).Msg(fmt.Sprintf("runDur: %s, must be of the form 'xs' or xm where 'x' is an integer and 's' indicates seconds and 'm' indicates minutes",
-			config.RunDuration))
-		return
-	}
 	go startProgressBar(progressC, doneC, dur, config.NumRequests)
 
 	go scheduler.Start()
@@ -240,8 +251,8 @@ LOOP:
 		}
 	}
 
-	progress.Wait()
 	if ticker != nil {
 		ticker.Stop()
 	}
+	progress.Wait()
 }

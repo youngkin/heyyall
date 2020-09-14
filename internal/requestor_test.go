@@ -54,7 +54,7 @@ func TestHappyPath(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		rqstr.ProcessRqst(ep, 1, time.Second*0, 1000)
+		rqstr.ProcessRqst(ep, 1, 1000)
 		wg.Done()
 	}()
 	resp := <-respC
@@ -81,7 +81,7 @@ func TestCtxCancel(t *testing.T) {
 
 	client := http.Client{}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+
 	respC := make(chan Response)
 	rqstr := Requestor{
 		Ctx:       ctx,
@@ -92,10 +92,11 @@ func TestCtxCancel(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		rqstr.ProcessRqst(ep, 1, time.Second*0, 1000)
+		rqstr.ProcessRqst(ep, 1, 1000)
 		wg.Done()
 	}()
 
+	time.Sleep(10 * time.Millisecond)
 	cancel()
 
 	wg.Wait()
@@ -116,7 +117,7 @@ func TestTimeout(t *testing.T) {
 	ep.URL = url
 
 	client := http.Client{}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	respC := make(chan Response)
 	rqstr := Requestor{
@@ -128,7 +129,7 @@ func TestTimeout(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		rqstr.ProcessRqst(ep, 0, time.Millisecond*10, 1000)
+		rqstr.ProcessRqst(ep, 0, 1000)
 		wg.Done()
 	}()
 

@@ -16,7 +16,7 @@ import (
 
 // IRequestor declares the functionality needed to make requests to an endpoint
 type IRequestor interface {
-	ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Duration, rqstRate int)
+	ProcessRqst(ep api.Endpoint, numRqsts int, rqstRate int)
 	ResponseChan() chan Response
 }
 
@@ -48,15 +48,10 @@ type Scheduler struct {
 }
 
 // NewScheduler returns a valid Scheduler instance
-func NewScheduler(concurrency int, rate int, runDur string, numRqsts int,
+func NewScheduler(concurrency int, rate int, runDur time.Duration, numRqsts int,
 	eps []api.Endpoint, rqstr IRequestor) (*Scheduler, error) {
 
-	dur, err := time.ParseDuration(runDur)
-	if err != nil {
-		return nil, fmt.Errorf("runDur: %s, must be of the form 'xs' or xm where 'x' is an integer and 's' indicates seconds and 'm' indicates minutes",
-			runDur)
-	}
-	err = validateConfig(concurrency, rate, dur, numRqsts, eps)
+	err := validateConfig(concurrency, rate, runDur, numRqsts, eps)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +59,7 @@ func NewScheduler(concurrency int, rate int, runDur string, numRqsts int,
 	schedlr := Scheduler{
 		concurrency: concurrency,
 		rqstRate:    rate,
-		runDur:      dur,
+		runDur:      runDur,
 		numRqsts:    numRqsts,
 		endpoints:   eps,
 		rqstr:       rqstr,
@@ -88,7 +83,7 @@ func (s Scheduler) Start() error {
 				log.Debug().Msgf("Starting Endpoint Goroutine for EP: %s numRqsts: %d, runDur: %d, and rqstRate: %d", ep.URL,
 					numRqstsPerGoroutine, s.runDur/time.Second, goroutineRqstRate)
 
-				s.rqstr.ProcessRqst(ep, numRqstsPerGoroutine, s.runDur, goroutineRqstRate)
+				s.rqstr.ProcessRqst(ep, numRqstsPerGoroutine, goroutineRqstRate)
 				wg.Done()
 			}()
 		}

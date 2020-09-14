@@ -25,7 +25,7 @@ type MockRequestor struct {
 	mux               *sync.Mutex
 }
 
-func (r *MockRequestor) ProcessRqst(ep api.Endpoint, numRqsts int, runDur time.Duration, rqstRate int) {
+func (r *MockRequestor) ProcessRqst(ep api.Endpoint, numRqsts int, rqstRate int) {
 	r.mux.Lock()
 	r.actualNumRqstrs += numRqsts
 	r.mux.Unlock()
@@ -276,28 +276,6 @@ func TestValidation(t *testing.T) {
 			shouldFail: true,
 		},
 		{
-			name:        "FailPath - invalid runDur (should be 1s or 1m)",
-			rqstRate:    goFastRate,
-			runDur:      "1",
-			numRqsts:    0,
-			concurrency: 100,
-			eps: []api.Endpoint{
-				{
-					URL:         url1,
-					Method:      "GET",
-					RqstBody:    "",
-					RqstPercent: 80,
-				},
-				{
-					URL:         url2,
-					Method:      "PUT",
-					RqstBody:    "",
-					RqstPercent: 20,
-				},
-			},
-			shouldFail: true,
-		},
-		{
 			name:        "FailPath - numRqsts < concurrency",
 			rqstRate:    goFastRate,
 			runDur:      "0s",
@@ -483,8 +461,12 @@ func TestValidation(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			runDir, err := time.ParseDuration(tc.runDur)
+			if err != nil {
+				t.Fatalf("unable to parse time.Duration from %s", tc.runDur)
+			}
 
-			_, err := NewScheduler(tc.concurrency, tc.rqstRate, tc.runDur,
+			_, err = NewScheduler(tc.concurrency, tc.rqstRate, runDir,
 				tc.numRqsts, tc.eps, tc.rqstr)
 
 			if err == nil && tc.shouldFail == true {
@@ -516,7 +498,7 @@ func TestRqstrInteractions(t *testing.T) {
 		},
 	}
 
-	s, err := NewScheduler(concurrency, 1000, "0s", numRqsts, eps, rqstr)
+	s, err := NewScheduler(concurrency, 1000, time.Duration(0), numRqsts, eps, rqstr)
 	if err != nil {
 		t.Errorf("unexpected error calling NewScheduler(): %s", err)
 	}
