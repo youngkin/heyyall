@@ -8,6 +8,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -94,9 +96,6 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, rqstRate int) {
 	for i := 0; i < numRqsts; i++ {
 		start := time.Now()
 		resp, err := client.Do(req)
-		if resp != nil {
-			defer resp.Body.Close()
-		}
 		if err != nil {
 			switch e := err.(type) {
 			case *url.Error:
@@ -108,6 +107,10 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, rqstRate int) {
 				return
 			}
 		}
+
+		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
+
 		select {
 		case <-r.Ctx.Done():
 			log.Debug().Msg("Requestor cancelled or the run duration expired, exiting")
