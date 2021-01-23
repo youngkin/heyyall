@@ -32,7 +32,7 @@ Configuration may be as simple as targeting a single endpoint:
             "URL": "https://accountd.kube/users/1",
             "Method": "GET",
             "RqstBody": "",
-            "RqstPercent": 100
+            "RqstPercent": 100,
             "KeyFile": "/path/to/private/key/file",
             "CertFile": "path/to/certificate/file",
         }
