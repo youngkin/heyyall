@@ -1,13 +1,19 @@
 [![Build Status](https://travis-ci.org/youngkin/heyyall.svg?branch=master)](https://travis-ci.org/youngkin/heyyall) [![Go Report Card](https://goreportcard.com/badge/github.com/youngkin/heyyall)](https://goreportcard.com/report/github.com/youngkin/heyyall)
 
-# heyyall (Hey Y'all!)
-<img src="heyyall.jpg" width="120" height="120" style="float: left; margin: 3px 20px 3px 0px; border: 1px solid #000000;">
+Fork of ['heyyall'](https://github.com/youngkin/heyyall) with headers support
 
-`heyyall` is an HTTP load generator inspired by ['hey'](https://github.com/rakyll/hey). As the name suggests, `heyyall` says `hey` to multiple endpoints in a single test execution. It also supports multiple operations per endpoint, i.e., GET, POST, PUT, and DELETE. `hey` is limited to a single endpoint and operation per test execution. The metrics generated for each test execution are similar to `hey`, but summary and detail metrics for each endpoint are also generated.
 
-`heyyall` was created to facilitate testing a set of related services each of which expose their own HTTP endpoints and resources. In order to test the application as a whole while exercising the full range of capability a more powerful tool was needed.
+# How to get it/build it
 
-`heyyall` can also be configured to work with HTTPS services via a client certificate and private key.
+* If you have a Go development environment you can:
+  * Clone the respository and build it yourself
+  * Run `make build`
+* 
+* Download a binary from bin folder (see repository):
+  * Windows
+  * Linux AMD64 and ARM (v6 & v7)
+  * MacOS
+
 
 # Examples
 
@@ -31,6 +37,9 @@ Configuration may be as simple as targeting a single endpoint:
         {
             "URL": "https://accountd.kube/users/1",
             "Method": "GET",
+            "Headers": {
+              "X-Heyy": "all"
+            },
             "RqstBody": "",
             "RqstPercent": 100,
             "KeyFile": "/path/to/private/key/file",
@@ -71,17 +80,6 @@ A more sophisticated configuration can target multiple endpoints and perform mul
 }
 ```
 
-# How to get it/build it
-
-`heyyall` is written in Go. There are several ways to install the program.
-
-* If you have a Go development environment you can:
-  * Clone the respository and build it yourself
-  * Run `go install github.com/youngkin/heyyall`
-* Download a binary from [releases page](https://github.com/youngkin/heyyall/releases). There are binaries for:
-  * Windows
-  * Linux AMD64 and ARM (v6 & v7)
-  * MacOS
 * Homebrew support is planned for the future
   
 # Usage

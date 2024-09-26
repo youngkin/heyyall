@@ -20,6 +20,11 @@ type srvHandler struct {
 }
 
 func (s *srvHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	for headerName, headerValues := range r.Header {
+		for _, headerValue := range headerValues {
+			w.Header().Add(headerName, headerValue)
+		}
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -32,6 +37,10 @@ func TestHappyPath(t *testing.T) {
 	ep := api.Endpoint{
 		Method:      "GET",
 		RqstPercent: 100,
+		Headers: map[string]string{
+			"Content-Type":    "application/happy",
+			"X-Custom-Header": "customer header value",
+		},
 	}
 
 	srvHandler := srvHandler{HTTPStatus: 200}
@@ -60,6 +69,12 @@ func TestHappyPath(t *testing.T) {
 	resp := <-respC
 	if resp.HTTPStatus != http.StatusOK {
 		t.Errorf("expected HTTP status %d, got %d", 200, resp.HTTPStatus)
+	}
+	if contentType := resp.Header.Get("Content-Type"); contentType != "application/happy" {
+		t.Errorf("unexpected HTTP Response header Content-Type, got %s", contentType)
+	}
+	if customHeader := resp.Header.Get("X-Custom-Header"); customHeader != "customer header value" {
+		t.Errorf("unexpected HTTP Response header X-Custom-Header, got %s", customHeader)
 	}
 
 	wg.Wait()

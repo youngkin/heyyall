@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 type Response struct {
 	HTTPStatus           int
 	Endpoint             api.Endpoint
+	Header               http.Header
 	RequestDuration      time.Duration
 	DNSLookupDuration    time.Duration
 	TCPConnDuration      time.Duration
