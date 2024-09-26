@@ -3,7 +3,7 @@ all: clean build test fmt
 
 .PHONY: artifacts
 build:
-	GO111MODULE=on GOARCH=${GOARCH} go build ./internal/testhttpsserver
+	GO111MODULE=on GOARCH=${GOARCH} go build ./heyyall.go
 
 .PHONY: artifacts
 release:
