@@ -48,6 +48,11 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, rqstRate int) {
 		log.Warn().Err(err).Msgf("Requestor unable to create http request")
 		return
 	}
+	if ep.Headers != nil {
+		for headerName, headerValue := range ep.Headers {
+			req.Header.Add(headerName, headerValue)
+		}
+	}
 
 	var dnsStart, dnsDone, connStart, connDone, gotResp, tlsStart, tlsDone time.Time
 
@@ -118,6 +123,7 @@ func (r Requestor) ProcessRqst(ep api.Endpoint, numRqsts int, rqstRate int) {
 		case r.ResponseC <- Response{
 			HTTPStatus:           resp.StatusCode,
 			Endpoint:             api.Endpoint{URL: ep.URL, Method: ep.Method},
+			Header:               resp.Header,
 			RequestDuration:      time.Since(start),
 			DNSLookupDuration:    dnsDone.Sub(dnsStart),
 			TCPConnDuration:      connDone.Sub(connStart),

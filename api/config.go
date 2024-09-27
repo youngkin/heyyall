@@ -20,7 +20,7 @@ var MaxRqsts = 1000000
 // the total run duration.
 var MaxRunDuration = time.Duration(time.Hour * 3)
 
-// Endpoint contains the information needed to to send a request,
+// Endpoint contains the information needed to send a request,
 // in the desired proportion to total requests, to a given
 // HTTP endpoint (e.g., someplace.com).
 type Endpoint struct {
@@ -47,8 +47,8 @@ type Endpoint struct {
 	// certificate. It will only be used if it has a non-empty value. It will
 	// override the CertificateFile specified at the LoadTestConfig level.
 	CertFile string
-	// TODO: Accept header
-	// TODO: content type header
+	// Headers is an array of name-value pairs representing headers to send to the endpoint
+	Headers map[string]string
 }
 
 // LoadTestConfig contains all the information needed to configure

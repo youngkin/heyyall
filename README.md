@@ -31,6 +31,9 @@ Configuration may be as simple as targeting a single endpoint:
         {
             "URL": "https://accountd.kube/users/1",
             "Method": "GET",
+            "Headers": {
+              "X-Hey": "y'all"
+            },
             "RqstBody": "",
             "RqstPercent": 100,
             "KeyFile": "/path/to/private/key/file",
@@ -77,7 +80,7 @@ A more sophisticated configuration can target multiple endpoints and perform mul
 
 * If you have a Go development environment you can:
   * Clone the respository and build it yourself
-  * Run `go install github.com/youngkin/heyyall`
+  * Run `make build`
 * Download a binary from [releases page](https://github.com/youngkin/heyyall/releases). There are binaries for:
   * Windows
   * Linux AMD64 and ARM (v6 & v7)

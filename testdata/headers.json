@@ -1,0 +1,28 @@
+{
+    "RqstRate": 1,
+    "MaxConcurrentRqsts": 2,
+    "RunDuration": "0s",
+    "NumRequests": 3,
+    "Endpoints": [
+        {
+            "URL": "https://echo.free.beeceptor.com/1",
+            "Method": "PUT",
+            "RqstBody": "{}",
+            "RqstPercent": 33,
+            "Headers": {
+                "Content-Type": "application/json",
+                "X-Customer-Header1": "customer header value1"
+            }
+        },
+        {
+            "URL": "https://echo.free.beeceptor.com/2",
+            "Method": "GET",
+            "RqstBody": "",
+            "RqstPercent": 67,
+            "Headers": {
+                "X-Customer-Header2": "customer header value2"
+            }
+        }
+    ]
+
+}
